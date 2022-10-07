@@ -56,7 +56,10 @@ dml_first_stage_lasso <- function(data,
   nobs <- nrow(x_data)
   foldid <- rep.int(1:nfold, times = ceiling(nobs / nfold))[sample.int(nobs)]
   I <- split(1:nobs, foldid)
-  ytil <- ypreds <- dtil <- dpreds <- rep(NA, nobs)
+  ytil <- ypreds <- rep(NA, nobs)
+  dtil <- dpreds <- matrix(nrow = nobs, ncol = ncol(d_data))
+  colnames(dtil) <- colnames(d_data)
+  colnames(dpreds) <- colnames(d_data)
   thetas <- list()
 
 
@@ -64,60 +67,74 @@ dml_first_stage_lasso <- function(data,
   y_predictors <- d_predictors <- tibble::tibble()
   # The following loop builds residuals over the folds
   for (b in 1:length(I)) {
-    browser()
+
     # Following four lines subsets each component of data
     x_sub <- x_data[-I[[b]], ]
     y_sub <- y_data[-I[[b]]]
     d_sub <- d_data[-I[[b]], ]
-    test_x <- x_data[I[[b]], ] # Held-out Xs to predict values
+
+    x_test <- x_data[I[[b]], ] # Held-out Xs to predict values
+    y_test <- y_data[I[[b]]]
+    d_test <- d_data[I[[b]], ]
+
     # Residualize
     y_model <- obsDML:::lasso_helper(
       x = x_sub,
       y = y_sub,
       family = y_family,
-      test_x = test_x,
+      test_x = x_test,
       ...
     )
 
 
-
-    dhat <- sapply(1:ncol(test_d),function(d_index){
+    d_models <- map(1:ncol(d_sub),function(d_index){
 
       d_model <- obsDML:::lasso_helper(
         x = x_sub,
-        y = d_sub,
+        y = d_sub[,d_index],
         family = d_family,
-        test_x = test_x,
+        test_x = x_test,
         ...
       )
 
-
-      d_model$values
     })
 
     # Return predicted values
+    dhat <- d_models %>% sapply(pluck, 'values')
     yhat <- y_model$values
+
     # Return selected LASSO variables
-    d_predictors <- dplyr::bind_rows(d_predictors, d_model$coefficients)
+    d_predictors <- dplyr::bind_rows(d_predictors, d_models %>% map_df(pluck, 'coefficients'))
     y_predictors <- dplyr::bind_rows(y_predictors, y_model$coefficients)
-    # Get predicted values
+
+     # Get predicted values
     ypreds[I[[b]]] <- yhat
-    dpreds[I[[b]]] <- dhat
+    dpreds[I[[b]],] <- dhat
+
     # Calculate Residuals
-    ytil[I[[b]]] <- (obsDML:::as_numeric(y[I[[b]]]) - yhat)
-    dtil[I[[b]]] <- (obsDML:::as_numeric(d[I[[b]]]) - dhat)
+    ytil[I[[b]]] <- (y_test - yhat)
+    dtil[I[[b]],] <- (as.matrix(d_test) - dhat)
+
+    partial_model_df <- tibble::tibble(y_til = ytil[I[[b]]]) %>%
+      dplyr::bind_cols(dtil[I[[b]],])
+
+    partial_model_coefs <- stats::lm(data = partial_model_df,  y_til ~ .) %>%
+      summary %>%
+      coef
     # Calculate theta for DML1 calculation
     theta <- list(
-      theta = coef(Matrix::summary(stats::lm(ytil[I[[b]]] ~ dtil[I[[b]]])))[, 1][2],
-      se = coef(Matrix::summary(stats::lm(ytil[I[[b]]] ~ dtil[I[[b]]])))[, 2][2],
+      theta = partial_model_coefs[, 1][-1],
+      se = partial_model_coefs[, 2][-1],
       ytil = ytil[I[[b]]],
-      dtil = dtil[I[[b]]]
+      dtil = dtil[I[[b]],]
     )
     thetas <- append(thetas, list("theta" = theta))
     if (verbose == TRUE) {
       cat("\r--- Finished fold", b, "---\n")
     }
   }
+
+  browser()
   # List of error-checking
   obsDML:::assert(sum(is.na(ytil)) == 0)
   obsDML:::assert(sum(is.na(dtil)) == 0)
@@ -126,123 +143,48 @@ dml_first_stage_lasso <- function(data,
   obsDML:::assert(sum(is.na(thetas)) == 0, message = "Vector 'thetas' has NA values")
   obsDML:::assert(length(ytil) == nobs)
   # Calculate precision metrics
-  outcomes <- tibble::tibble(
-    y_truth = y,
-    y_pred = ypreds,
-    d_truth = d,
-    `0` = 1 - dpreds,
-    d_pred = dpreds,
-    y_resid = ytil,
-    d_resid = dtil
-  )
+
+  outcomes <- d_data %>%
+    dplyr::rename_all(~ paste(., "truth", sep = "_")) %>%
+    dplyr::bind_cols(tibble::as_tibble(dpreds) %>% dplyr::rename_all(~ paste(., "pred", sep = "_"))) %>%
+    dplyr::bind_cols(tibble::as_tibble(dtil) %>% dplyr::rename_all(~ paste(., "resid", sep = "_"))) %>%
+    dplyr::mutate(observation = dplyr::row_number()
+                  , y_truth = y_data
+                  , y_resid = ytil
+                  , y_pred = ypreds)
+
+
   rsquared <- yardstick::rsq(
     data = outcomes,
     y_truth,
     y_pred
   )$`.estimate`
+
   RMSE <- yardstick::rmse(
     data = outcomes,
     y_truth,
     y_pred
   )$`.estimate`
-  auc <- obsDML::auc_roc(preds = outcomes$d_pred,
-                         actuals = obsDML:::as_numeric(outcomes$d_truth))
-  # Plot histogram of propensity scores
-  prop_scores_hist <- outcomes %>%
-    dplyr::rename("Treatment" = d_truth) %>%
-    ggplot2::ggplot(ggplot2::aes(x = d_pred, fill = Treatment)) +
-    ggplot2::geom_histogram(bins = 100) +
-    ggplot2::facet_wrap(~Treatment, nrow = 2) +
-    ggplot2::labs(
-      x = "Propensity Scores",
-      y = "Frequency",
-      title = "Histogram of Propensity Scores"
-    ) +
-    ggplot2::theme(
-      panel.background = ggplot2::element_blank(),
-      panel.grid.major.x = ggplot2::element_line(color = "gray95"),
-      legend.key = ggplot2::element_rect(fill = "white"),
-      axis.text = ggplot2::element_text(face = "bold"),
-      axis.title = ggplot2::element_text(face = "bold"),
-      plot.title = ggplot2::element_text(
-        hjust = 0.5,
-        face = "bold"
-      )
-    )
-  # Plot Actual y values vs Predicted y values
-  actual_vs_pred <- outcomes %>%
-    dplyr::rename("Treatment" = d_truth) %>%
-    ggplot2::ggplot(ggplot2::aes(
-      x = y_truth,
-      y = y_pred,
-      color = Treatment
-    )) +
-    ggplot2::geom_point(alpha = 0.5) +
-    ggplot2::facet_wrap(~Treatment, nrow = 2) +
-    ggplot2::labs(
-      x = "Y Truth",
-      y = "Y Predicted",
-      title = "Actual Y values vs Predicted Y values"
-    ) +
-    ggplot2::geom_abline(
-      slope = 1,
-      intercept = 0
-    ) +
-    ggplot2::theme(
-      panel.background = ggplot2::element_blank(),
-      panel.grid.major.x = ggplot2::element_line(color = "gray95"),
-      legend.key = ggplot2::element_rect(fill = "white"),
-      axis.text = ggplot2::element_text(face = "bold"),
-      axis.title = ggplot2::element_text(face = "bold"),
-      plot.title = ggplot2::element_text(
-        hjust = 0.5,
-        face = "bold"
-      )
-    )
-  # Plot histogram of Outcome residuals
-  outcome_resid_hist <- outcomes %>%
-    dplyr::rename("Treatment" = d_truth) %>%
-    ggplot2::ggplot(ggplot2::aes(x = y_resid, fill = Treatment)) +
-    ggplot2::geom_histogram(bins = 100) +
-    ggplot2::facet_wrap(~Treatment, nrow = 2) +
-    ggplot2::labs(
-      x = "Outcome Residuals",
-      y = "Frequency",
-      title = "Histogram of Outcome Residuals"
-    ) +
-    ggplot2::theme(
-      panel.background = ggplot2::element_blank(),
-      panel.grid.major.x = ggplot2::element_line(color = "gray95"),
-      legend.key = ggplot2::element_rect(fill = "white"),
-      axis.text = ggplot2::element_text(face = "bold"),
-      axis.title = ggplot2::element_text(face = "bold"),
-      plot.title = ggplot2::element_text(
-        hjust = 0.5,
-        face = "bold"
-      )
-    )
-  # Plot histogram of Treatment residuals
-  treat_resid_hist <- outcomes %>%
-    dplyr::rename("Treatment" = d_truth) %>%
-    ggplot2::ggplot(ggplot2::aes(x = d_resid, fill = Treatment)) +
-    ggplot2::geom_histogram(bins = 100) +
-    ggplot2::facet_wrap(~Treatment, nrow = 2) +
-    ggplot2::labs(
-      x = "Treatment Residuals",
-      y = "Frequency",
-      title = "Histogram of Treatment Residuals"
-    ) +
-    ggplot2::theme(
-      panel.background = ggplot2::element_blank(),
-      panel.grid.major.x = ggplot2::element_line(color = "gray95"),
-      legend.key = ggplot2::element_rect(fill = "white"),
-      axis.text = ggplot2::element_text(face = "bold"),
-      axis.title = ggplot2::element_text(face = "bold"),
-      plot.title = ggplot2::element_text(
-        hjust = 0.5,
-        face = "bold"
-      )
-    )
+
+  #outcome_resid_hist <- outcome_resid_hist(y_outcomes)
+
+  d_outcomes <- outcomes %>%
+    tidyr::pivot_longer(c(-observation, -y_truth, -y_resid, -y_pred), names_sep = '_', names_to = c('name', 'type')) %>%
+    dplyr::group_by(name) %>%
+    tidyr::nest() %>%
+    dplyr::mutate(data = purrr::map(data, function(data)
+      data %>%
+        tidyr::pivot_wider(id_cols = c(observation, y_truth, y_resid, y_pred), names_from = type, values_from = value) %>%
+        dplyr::mutate(d_truth = truth
+                      , d_pred = pred))) %>%
+    dplyr::mutate(auc = purrr::map_dbl(data, function(data)obsDML:::auc_roc(data$d_pred, data$d_truth))
+                  , outcome_resid_hist = purrr::map(data,outcome_resid_hist)
+                  , prop_scores_hist = purrr::map(data, prop_scores_hist)
+                  , actual_vs_pred = purrr::map(data, actual_vs_pred)
+                  , treat_resid_hist = purrr::map(data, treat_resid_hist))
+
+
+
   # Return residuals and predicted values
   out <- list(
     y_predicted_values = ypreds,
@@ -250,35 +192,13 @@ dml_first_stage_lasso <- function(data,
     y_residuals = ytil,
     d_residuals = dtil,
     y_actual = outcomes$y_truth,
-    d_actual = outcomes$d_truth,
+    d_actual = d_data,
     R2 = rsquared,
     RMSE = RMSE,
-    AUC = auc,
     d_propensity_hist = prop_scores_hist,
-    y_actual_vs_pred = actual_vs_pred,
-    y_resid_hist = outcome_resid_hist,
-    d_resid_hist = treat_resid_hist,
-    y_selected_vars = suppressMessages(
-      y_predictors %>%
-        dplyr::group_by(selected_variables) %>%
-        dplyr::summarise(
-          n = n(),
-          coef = Matrix::mean(selected_coefs)
-        ) %>%
-        dplyr::ungroup()
-    ),
-    d_selected_vars = suppressMessages(
-      d_predictors %>%
-        dplyr::group_by(selected_variables) %>%
-        dplyr::summarise(
-          n = n(),
-          coef = Matrix::mean(selected_coefs)
-        ) %>%
-        dplyr::ungroup()
-    ),
+    d_outcomes = d_outcomes,
     theta_estimates = thetas
   )
-  return(out)
 }
 
 

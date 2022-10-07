@@ -29,27 +29,32 @@ dml_first_stage_rf <- function(data,
                                error_type = "OOB",
                                ...) {
 
-  df <- dplyr::select(data, {{x_vars}} , y := {{y_var}})
-  d_df <- dplyr::select(data, {{d_vars}})
+  x_data <- dplyr::select(data, {{x_vars}} , y := {{y_var}})
+  d_data <- dplyr::select(data, {{d_vars}})
+  y_data <- data %>% dplyr::pull({{y_var}})
+
+
   # These following lines are stolen from Victor C.
-  nobs <- nrow(df)
+  nobs <- nrow(x_data)
   foldid <- rep.int(1:nfold, times = ceiling(nobs / nfold))[sample.int(nobs)]
   I <- split(1:nobs, foldid)
   ytil <- ypreds <- rep(NA, nobs)
-  dtil <- dpreds <- matrix(nrow = nobs, ncol = ncol(d_df))
-  colnames(dtil) <- colnames(d_df)
-  colnames(dpreds) <- colnames(d_df)
+  dtil <- dpreds <- matrix(nrow = nobs, ncol = ncol(d_data))
+  colnames(dtil) <- colnames(d_data)
+  colnames(dpreds) <- colnames(d_data)
   thetas <- list()
-  yprob <- is.factor(df$y)
+  yprob <- is.factor(x_data$y)
 
   # The following loop builds residuals over the folds
   for (b in 1:length(I)) {
     # Following four lines subsets each component of data
-    x_sub <- df[-I[[b]], ]
-    test_x <- df[I[[b]], ] # Held-out Xs to predict values
+    x_sub <- x_data[-I[[b]], ]
+    y_sub <- y_data[-I[[b]]]
+    d_sub <- d_data[-I[[b]], ]
 
-    d_sub <- d_df[-I[[b]], ]
-    test_d <- d_df[I[[b]], ]
+    x_test <- x_data[I[[b]], ] # Held-out Xs to predict values
+    y_test <- y_data[I[[b]]]
+    d_test <- d_data[I[[b]], ]
 
     # Residualize
     y_model <- suppressMessages(
@@ -60,22 +65,22 @@ dml_first_stage_rf <- function(data,
         mtry = mtry,
         num_trees = num_trees,
         node_size = node_size,
-        predict_df = test_x ,
+        predict_df = x_test ,
         error_type = error_type,
         verbose = FALSE
       )
     )
 
     yhat <- y_model$values
-    dhat <- sapply(1:ncol(test_d),function(d_index){
+    dhat <- sapply(1:ncol(d_test),function(d_index){
 
       d_model_df <- x_sub %>%
         dplyr::select(-y) %>%
         dplyr::mutate(d = dplyr::pull(d_sub, d_index))
 
-      d_predict_df <- test_x %>%
+      d_predict_df <- x_test %>%
         dplyr::select(-y) %>%
-        dplyr::mutate(d = dplyr::pull(test_d, d_index))
+        dplyr::mutate(d = dplyr::pull(d_test, d_index))
 
       dprob <- is.factor(d_model_df)
 
@@ -100,8 +105,8 @@ dml_first_stage_rf <- function(data,
     ypreds[I[[b]]] <- yhat
     dpreds[I[[b]],] <- dhat
     # Calculate Residuals
-    ytil[I[[b]]] <- (obsDML:::as_numeric(test_x$y) - yhat)
-    dtil[I[[b]],] <- (SparseM::as.matrix(test_d) - dhat)
+    ytil[I[[b]]] <- (obsDML:::as_numeric(x_test$y) - yhat)
+    dtil[I[[b]],] <- (SparseM::as.matrix(d_test) - dhat)
 
 
     partial_model_df <- tibble::tibble(y_til = ytil[I[[b]]]) %>%
@@ -132,12 +137,12 @@ dml_first_stage_rf <- function(data,
   obsDML:::assert(length(ytil) == nobs)
   # Calculate precision metrics
 
-  outcomes <- d_df %>%
+  outcomes <- d_data %>%
     dplyr::rename_all(~ paste(., "truth", sep = "_")) %>%
     dplyr::bind_cols(tibble::as_tibble(dpreds) %>% dplyr::rename_all(~ paste(., "pred", sep = "_"))) %>%
     dplyr::bind_cols(tibble::as_tibble(dtil) %>% dplyr::rename_all(~ paste(., "resid", sep = "_"))) %>%
     dplyr::mutate(observation = dplyr::row_number()
-                  , y_truth = df$y
+                  , y_truth = x_data$y
                   , y_resid = ytil
                   , y_pred = ypreds)
 
@@ -180,7 +185,7 @@ dml_first_stage_rf <- function(data,
     y_residuals = ytil,
     d_residuals = dtil,
     y_actual = outcomes$y_truth,
-    d_actual = d_df,
+    d_actual = d_data,
     R2 = rsquared,
     RMSE = RMSE,
     d_propensity_hist = prop_scores_hist,
