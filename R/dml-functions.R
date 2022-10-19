@@ -60,7 +60,7 @@ dml_second_stage_lasso <- function(formula,
   final_lasso <- gamlr::cv.gamlr(
     x = x,
     y = df %>%
-      dplyr::pull(obsDML:::formula_lhs(formula)),
+      dplyr::pull(riplDML:::formula_lhs(formula)),
     nfold = nfolds,
     standardize = standardize
   )
@@ -79,7 +79,7 @@ dml_second_stage_lasso <- function(formula,
       SparseM::as.matrix() %>%
       tibble::as_tibble()
     ols <- tryCatch(
-      estimatr::lm_robust(df %>% dplyr::pull(obsDML:::formula_lhs(formula)) ~ ., data = x_lm),
+      estimatr::lm_robust(df %>% dplyr::pull(riplDML:::formula_lhs(formula)) ~ ., data = x_lm),
       error = function(e) {
         cat("\rPost-LASSO estimator threw an error :(\t\t\t\n")
         return(NULL)
@@ -144,7 +144,7 @@ dml_second_stage_ridge <- function(formula,
   final_ridge <- glmnet::cv.glmnet(
     x = x,
     y = df %>%
-      dplyr::pull(obsDML:::formula_lhs(formula)),
+      dplyr::pull(riplDML:::formula_lhs(formula)),
     nfolds = nfolds,
     alpha = 0,
     standardize = standardize
@@ -199,7 +199,7 @@ dml_second_stage_ridge_boot <- function(formula,
     dim(x)[2],
     "columns\n"
   )
-  y <- df %>% dplyr::pull(obsDML:::formula_lhs(formula))
+  y <- df %>% dplyr::pull(riplDML:::formula_lhs(formula))
   # Define function that runs ridge on bootstrap sample
   set.seed(202103)
   glmnet_call <- function(idx) {

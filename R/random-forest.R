@@ -105,7 +105,7 @@ dml_first_stage_rf <- function(data,
     ypreds[I[[b]]] <- yhat
     dpreds[I[[b]],] <- dhat
     # Calculate Residuals
-    ytil[I[[b]]] <- (obsDML:::as_numeric(x_test$y) - yhat)
+    ytil[I[[b]]] <- (riplDML:::as_numeric(x_test$y) - yhat)
     dtil[I[[b]],] <- (SparseM::as.matrix(d_test) - dhat)
 
 
@@ -129,12 +129,12 @@ dml_first_stage_rf <- function(data,
   }
 
   # List of error-checking
-  obsDML:::assert(sum(is.na(ytil)) == 0)
-  obsDML:::assert(sum(is.na(dtil)) == 0)
-  obsDML:::assert(sum(is.na(ypreds)) == 0)
-  obsDML:::assert(sum(is.na(dpreds)) == 0)
-  obsDML:::assert(sum(is.na(thetas)) == 0, message = "Vector 'thetas' has NA values")
-  obsDML:::assert(length(ytil) == nobs)
+  riplDML:::assert(sum(is.na(ytil)) == 0)
+  riplDML:::assert(sum(is.na(dtil)) == 0)
+  riplDML:::assert(sum(is.na(ypreds)) == 0)
+  riplDML:::assert(sum(is.na(dpreds)) == 0)
+  riplDML:::assert(sum(is.na(thetas)) == 0, message = "Vector 'thetas' has NA values")
+  riplDML:::assert(length(ytil) == nobs)
   # Calculate precision metrics
 
   outcomes <- d_data %>%
@@ -170,7 +170,7 @@ dml_first_stage_rf <- function(data,
         tidyr::pivot_wider(id_cols = c(observation, y_truth, y_resid, y_pred), names_from = type, values_from = value) %>%
         dplyr::mutate(d_truth = truth
                       , d_pred = pred))) %>%
-    dplyr::mutate(auc = purrr::map_dbl(data, function(data)obsDML:::auc_roc(data$d_pred, data$d_truth))
+    dplyr::mutate(auc = purrr::map_dbl(data, function(data)riplDML:::auc_roc(data$d_pred, data$d_truth))
                   , outcome_resid_hist = purrr::map(data,outcome_resid_hist)
                   , prop_scores_hist = purrr::map(data, prop_scores_hist)
                   , actual_vs_pred = purrr::map(data, actual_vs_pred)
@@ -213,16 +213,16 @@ rf_helper <- function(form,
                       verbose = FALSE,
                       ...) {
   # Error checking
-  obsDML:::assert(
+  riplDML:::assert(
     is.null(error_type) | error_type == "OOB",
     "Argument 'error_type' must be either NULL or 'OOB'"
   )
   # Split out data by train and test set
-  x <- df %>% dplyr::select(-!!obsDML:::formula_lhs(form))
-  y <- df %>% dplyr::pull(obsDML:::formula_lhs(form))
+  x <- df %>% dplyr::select(-!!riplDML:::formula_lhs(form))
+  y <- df %>% dplyr::pull(riplDML:::formula_lhs(form))
   if (!is.null(predict_df)) {
-    predict_x <- predict_df %>% dplyr::select(-!!obsDML:::formula_lhs(form))
-    predict_y <- predict_df %>% dplyr::pull(obsDML:::formula_lhs(form))
+    predict_x <- predict_df %>% dplyr::select(-!!riplDML:::formula_lhs(form))
+    predict_y <- predict_df %>% dplyr::pull(riplDML:::formula_lhs(form))
   }
   # Run models across tuning grid if specified
   # If not, run model with default values

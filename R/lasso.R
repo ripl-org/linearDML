@@ -78,7 +78,7 @@ dml_first_stage_lasso <- function(data,
     d_test <- d_data[I[[b]], ]
 
     # Residualize
-    y_model <- obsDML:::lasso_helper(
+    y_model <- riplDML:::lasso_helper(
       x = x_sub,
       y = y_sub,
       family = y_family,
@@ -89,7 +89,7 @@ dml_first_stage_lasso <- function(data,
 
     d_models <- map(1:ncol(d_sub),function(d_index){
 
-      d_model <- obsDML:::lasso_helper(
+      d_model <- riplDML:::lasso_helper(
         x = x_sub,
         y = d_sub[,d_index],
         family = d_family,
@@ -136,12 +136,12 @@ dml_first_stage_lasso <- function(data,
 
   browser()
   # List of error-checking
-  obsDML:::assert(sum(is.na(ytil)) == 0)
-  obsDML:::assert(sum(is.na(dtil)) == 0)
-  obsDML:::assert(sum(is.na(ypreds)) == 0)
-  obsDML:::assert(sum(is.na(dpreds)) == 0)
-  obsDML:::assert(sum(is.na(thetas)) == 0, message = "Vector 'thetas' has NA values")
-  obsDML:::assert(length(ytil) == nobs)
+  riplDML:::assert(sum(is.na(ytil)) == 0)
+  riplDML:::assert(sum(is.na(dtil)) == 0)
+  riplDML:::assert(sum(is.na(ypreds)) == 0)
+  riplDML:::assert(sum(is.na(dpreds)) == 0)
+  riplDML:::assert(sum(is.na(thetas)) == 0, message = "Vector 'thetas' has NA values")
+  riplDML:::assert(length(ytil) == nobs)
   # Calculate precision metrics
 
   outcomes <- d_data %>%
@@ -177,7 +177,7 @@ dml_first_stage_lasso <- function(data,
         tidyr::pivot_wider(id_cols = c(observation, y_truth, y_resid, y_pred), names_from = type, values_from = value) %>%
         dplyr::mutate(d_truth = truth
                       , d_pred = pred))) %>%
-    dplyr::mutate(auc = purrr::map_dbl(data, function(data)obsDML:::auc_roc(data$d_pred, data$d_truth))
+    dplyr::mutate(auc = purrr::map_dbl(data, function(data)riplDML:::auc_roc(data$d_pred, data$d_truth))
                   , outcome_resid_hist = purrr::map(data,outcome_resid_hist)
                   , prop_scores_hist = purrr::map(data, prop_scores_hist)
                   , actual_vs_pred = purrr::map(data, actual_vs_pred)

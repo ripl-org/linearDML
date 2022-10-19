@@ -52,7 +52,7 @@ assert <- function(condition,
 
 # Pull the lhs of a function (can be in character format)
 formula_lhs <- function(form) {
-  obsDML:::assert(purrr::is_formula(form),
+  riplDML:::assert(purrr::is_formula(form),
          "Object doesn't appear to be a valid formula.")
   lhs <- trimws(form[2])
   return(lhs)
@@ -60,7 +60,7 @@ formula_lhs <- function(form) {
 
 # Pull the rhs of a function including the '~'
 formula_rhs <- function(form) {
-  obsDML:::assert(purrr::is_formula(form),
+  riplDML:::assert(purrr::is_formula(form),
          "Object doesn't appear to be a valid formula.")
   rhs <- paste("~", form[3])
   return(rhs)
@@ -123,7 +123,7 @@ na_ref <- function(var) {
 remove_duplicates <- function(dat,
                               return.sparse = FALSE){
   is_df <- is.data.frame(dat)
-  is_sM <- obsDML::is_sparseMatrix(dat)
+  is_sM <- riplDML::is_sparseMatrix(dat)
   if(!is_sM) dat <- SparseM::as.matrix(dat)
   dup.cols <- as.vector(duplicated.matrix(SparseM::t(dat)))
   dat <- dat[, !dup.cols]
@@ -183,7 +183,7 @@ sparsity <- function(dat,
 standardize <- function(var) {
   # Function that scales any non-factor/character vector
   stdz <- function(x){
-    if(!is.factor(x) & !is.character(x) & !obsDML::is_binary(x)) {
+    if(!is.factor(x) & !is.character(x) & !riplDML::is_binary(x)) {
       x <- as.vector(scale(x))
     }
     return(x)
@@ -226,14 +226,14 @@ strat_sample_boot <- function(df,
   if(parallel == FALSE) {
     # Create n samples using strat_sample function
     samples <- lapply(boot_list, function(i) {
-      return(obsDML::strat_sample(df = df, strat = strat))
+      return(riplDML::strat_sample(df = df, strat = strat))
     })
   } else {
     # Initialize parallel processing
     future::plan(multiprocess)
     # Create n samples using strat_sample function
     samples <- future.apply::future_lapply(boot_list, function(i) {
-      return(obsDML::strat_sample(df = df, strat = strat))
+      return(riplDML::strat_sample(df = df, strat = strat))
     })
   }
   # Return list of n bootstrap samples with names
@@ -245,13 +245,13 @@ strat_sample_boot <- function(df,
 train_test_validate <- function(y,
                                 train.p,
                                 test.p) {
-  rand_idx <- obsDML::shuffle(1:length(y))
+  rand_idx <- riplDML::shuffle(1:length(y))
   train_idx <- floor(train.p*length(y))
   test_idx <- floor(test.p*length(y)) + train_idx
   train <- rand_idx[1:train_idx]
   test <- rand_idx[(train_idx + 1):test_idx]
   validate <- rand_idx[(test_idx + 1):length(y)]
-  obsDML:::assert(sum(c(train, test, validate) == rand_idx) == length(y))
+  riplDML:::assert(sum(c(train, test, validate) == rand_idx) == length(y))
   return(list(train = sort(train),
               test = sort(test),
               validate = sort(validate)))
