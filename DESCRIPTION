@@ -24,4 +24,5 @@ Imports:
     ranger,
     recipes,
     sandwich,
-    SparseM
+    SparseM,
+    parsnip
