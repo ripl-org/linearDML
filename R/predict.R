@@ -9,12 +9,16 @@
 #' @param x_vars
 #' @param family
 #' @param second_stage
-#'
+#' @param use_default_hyper
 #' @return
 #' @export
 #'
 #' @examples
-predict.dml <- function(data, y_var, x_vars, family = 'ols'){
+predict.dml <- function(data
+                        , y_var
+                        , x_vars
+                        , family = 'ols'
+                        , ...){
   x_data <- dplyr::select(data, x_vars)
   y_data <- dplyr::pull(data, y_var)
 
@@ -50,13 +54,14 @@ predict.dml <- function(data, y_var, x_vars, family = 'ols'){
   if(family == 'ols'){
     model_spec_fold1 <- parsnip::linear_reg() %>%
       parsnip::set_engine("lm")
+
     model_spec_fold2 <- model_spec_fold1
 
   } else if(family == 'rf'){
 
     #perform cross validation on rf
-    model_spec_fold1 <- fit_cv_rf(fold_1)
-    model_spec_fold2 <- fit_cv_rf(fold_2)
+    model_spec_fold1 <- fit_cv_rf(fold_1, ...)
+    model_spec_fold2 <- fit_cv_rf(fold_2, ...)
 
   }
 
@@ -66,7 +71,6 @@ predict.dml <- function(data, y_var, x_vars, family = 'ols'){
 
   predictions[fold2_indices] <- predict(model_fit_fold1, fold_2)$.pred
   predictions[fold1_indices] <- predict(model_fit_fold2, fold_1)$.pred
-
 
   resids[fold2_indices] <- predictions[fold2_indices] - y_data[fold2_indices]
   resids[fold1_indices] <- predictions[fold1_indices] - y_data[fold1_indices]
@@ -81,9 +85,18 @@ predict.dml <- function(data, y_var, x_vars, family = 'ols'){
 }
 
 fit_cv_rf <- function(data
-                      , grid_size = 25
-                      , fold_size = 4){
+                      , grid_size = 20
+                      , fold_size = 4
+                      , use_default_hyper = TRUE){
 
+  model_spec_default <- parsnip::rand_forest() %>%
+    parsnip::set_mode("regression") %>%
+    parsnip::set_engine("ranger")
+
+  if(use_default_hyper)
+    return(model_spec_default)
+
+  message("Tuning random forest hyperparameters")
   model_spec_tune <- parsnip::rand_forest(trees = tune(), min_n = tune()) %>%
     parsnip::set_mode("regression") %>%
     parsnip::set_engine("ranger")
@@ -93,14 +106,15 @@ fit_cv_rf <- function(data
 
   dml_recipe <- recipes::recipe(y ~ ., data = data)
 
-  all_cores <- parallel::detectCores(logical = FALSE)
-  cl <- parallel::makePSOCKcluster(all_cores)
-  doParallel::registerDoParallel(cl)
+  #all_cores <- parallel::detectCores(logical = FALSE)
+  #cl <- parallel::makePSOCKcluster(all_cores)
+  #doParallel::registerDoParallel(cl)
 
   rf_res <- tune::tune_grid(object = model_spec_tune
                             , preprocessor = dml_recipe
                             , resamples = rf_cv
-                            , grid = grid_size)
+                            , grid = grid_size
+                            , control = control_grid(verbose = TRUE))
 
   best_hyper_parameters <- select_best(rf_res, metric = "rmse")
 
