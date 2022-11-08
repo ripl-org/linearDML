@@ -57,7 +57,6 @@ dml.lm <- function(data
       d_resids <- lapply(d_vars, function(d_var) predict_fun(data
                                                              , y_var = d_var
                                                              , x_vars = x_vars
-                                                             , family = first_stage_family
                                                              , ...)$resids)
       names(d_resids) <- d_vars
 
@@ -73,7 +72,6 @@ dml.lm <- function(data
       d_resids <- lapply(d_vars, function(d_var) predict_fun(data
                                                              , y_var = d_var
                                                              , x_vars = x_vars
-                                                             , family = first_stage_family
                                                              , ...)$resids)
       names(d_resids) <- d_vars
 
@@ -100,7 +98,6 @@ dml.lm <- function(data
     d_bar_output <- predict_fun(data
                                 , y_var = 'd_bar'
                                 , x_vars = x_vars
-                                , family = first_stage_family
                                 , ...)
     d_bar_resids <- d_bar_output$resids
     d_bar_hat <- d_bar_output$predictions
