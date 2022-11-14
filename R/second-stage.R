@@ -24,20 +24,23 @@ dml.lm <- function(data
                    , ...){
   out = list()
 
-  y_resids <- predict.dml(data, y_var = y_var, x_vars = x_vars, family = first_stage_family)$resids
+  y_model <- predict.dml(data, y_var = y_var, x_vars = x_vars, family = first_stage_family, ...)
+  y_resids <- y_model$resids
 
   if(second_stage_family == 'mr'){
     # Multiple Residualization
     # y_hat ~ sum_j d_hat_j
 
     # Predict outcomes and treatments
-    d_resids <- lapply(d_vars, function(d_var) predict.dml(data
+    d_models <- lapply(d_vars, function(d_var) predict.dml(data
                                                            , y_var = d_var
                                                            , x_vars = x_vars
                                                            , family = first_stage_family
-                                                           , ...)$resids)
-    names(d_resids) <- d_vars
+                                                           , ...))
 
+    d_resids <- d_models %>% lapply(purrr::pluck, 'resids')
+    names(d_resids) <- d_vars
+    out$d_model <- d_models
     # Residualize outcomes and treatments
     reg.data <- data.frame(y_resids, d_resids)
 
@@ -58,7 +61,7 @@ dml.lm <- function(data
                                 , ...)
     d_bar_resids <- d_bar_output$resids
     d_bar_hat <- d_bar_output$predictions
-
+    out$d_model <- d_bar_output
     if(second_stage_family == 'sr1'){
       # Single Residualization - Old
       # y_hat ~ sum_j d_j*d_bar_hat
@@ -78,7 +81,7 @@ dml.lm <- function(data
       reg.data <- data %>%
         dplyr::select(d_vars) %>%
         dplyr::mutate(d_bar_hat = d_bar_hat
-               , y_resids = y_resids)
+                      , y_resids = y_resids)
 
 
     }else{
@@ -89,7 +92,10 @@ dml.lm <- function(data
   }
 
   model <- lm(data = reg.data, y_resids ~ .)
-  return(model)
+  out$y_model <- y_model
+  out$model <- model
+
+  return(out)
 }
 
 
