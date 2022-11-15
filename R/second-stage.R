@@ -41,12 +41,13 @@ dml.lm <- function(data
                  'function(data, y_var, x_vars) returning list(predictions, resids)', sep=''))
     }
   }else{
-    predict_fun <- function(data, y_var, x_vars){
-      return(predict.dml(data, y_var = y_var, x_vars = x_vars, family=first_stage_family))
+    predict_fun <- function(data, y_var, x_vars, ...){
+      return(predict.dml(data, y_var = y_var, x_vars = x_vars,
+                         family=first_stage_family, ...))
     }
   }
 
-  y_resids <- predict_fun(data, y_var = y_var, x_vars = x_vars)$resids
+  y_resids <- predict_fun(data, y_var = y_var, x_vars = x_vars, ...)$resids
 
   if(second_stage_family == 'mr'){
     if(is.null(h_vars)){
@@ -110,7 +111,9 @@ dml.lm <- function(data
       reg.data <- data %>%
         dplyr::select(d_vars) %>%
         dplyr::mutate_all(~.x*d_bar_resids) %>% #interact all d's with d_bar_resids
-        dplyr::mutate(y_resids = y_resids)
+        dplyr::mutate(y_resids = y_resids
+                      # , DML_SR1_intercept = 1
+        )
 
 
     }else if(second_stage_family == 'sr2'){
@@ -131,7 +134,7 @@ dml.lm <- function(data
     stop('dml.lm(): second_stage should be mr, sr1, or sr2')
   }
 
-  model <- lm(data = reg.data, y_resids ~ .)
+  model <- lm(data = reg.data, y_resids ~ . -1)
   return(model)
 }
 

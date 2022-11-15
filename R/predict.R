@@ -18,6 +18,7 @@ predict.dml <- function(data
                         , y_var
                         , x_vars
                         , family = 'ols'
+                        , foldid = NULL
                         , ...){
   x_data <- dplyr::select(data, x_vars)
   y_data <- dplyr::pull(data, y_var)
@@ -35,7 +36,9 @@ predict.dml <- function(data
 
   #split data into two folds
   nobs <- nrow(x_data)
-  foldid <- rep.int(1:2, times = ceiling(nobs / 2))[sample.int(nobs)]
+  if(is.null(foldid)){
+    foldid <- rep.int(1:2, times = ceiling(nobs / 2))[sample.int(nobs)]
+  }
   I <- split(1:nobs, foldid)
   fold1_indices <- I[[1]]
   fold2_indices <- I[[2]]
@@ -72,8 +75,8 @@ predict.dml <- function(data
   predictions[fold2_indices] <- predict(model_fit_fold1, fold_2)$.pred
   predictions[fold1_indices] <- predict(model_fit_fold2, fold_1)$.pred
 
-  resids[fold2_indices] <- predictions[fold2_indices] - y_data[fold2_indices]
-  resids[fold1_indices] <- predictions[fold1_indices] - y_data[fold1_indices]
+  resids[fold2_indices] <- y_data[fold2_indices] - predictions[fold2_indices]
+  resids[fold1_indices] <- y_data[fold1_indices] - predictions[fold1_indices]
 
   #save model specs and residuals
   out <- list(model_fit_fold1 = model_fit_fold1
