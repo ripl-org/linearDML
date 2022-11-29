@@ -91,7 +91,7 @@ dml.lm <- function(data
     stop('dml.lm(): second_stage should be mr, sr1, or sr2')
   }
 
-  model <- lm(data = reg.data, y_resids ~ .)
+  model <- lm(data = reg.data, y_resids ~ . - 1)
   out$y_model <- y_model
   out$model <- model
 
