@@ -13,6 +13,7 @@ RoxygenNote: 7.2.1
 Imports: 
     doParallel,
     dplyr,
+    fastDummies,
     magrittr,
     recipes,
     parallel,
