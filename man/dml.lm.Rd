@@ -2,24 +2,142 @@
 % Please edit documentation in R/second-stage.R
 \name{dml.lm}
 \alias{dml.lm}
-\title{Estimates treatment effects by regressing outcome residuals on treatment
-residuals, where residuals come from predicting outcomes and treatments with
-covariates.}
+\title{dml.lm(): Fitting double/debiased machine learning (DML) models}
 \usage{
 dml.lm(
   data,
   y_var,
-  d_vars,
   x_vars,
-  first_stage_family = c("ols", "rf", "lasso"),
-  second_stage_family = c("mr", "sr1", "sr2")
+  d_vars = NULL,
+  h_vars = NULL,
+  first_stage_family = c("ols", "rf", "lasso", "user-defined"),
+  predict_fun = NULL,
+  second_stage_family = c("mr", "sr1", "sr2"),
+  ...
 )
 }
 \arguments{
-\item{second_stage_family}{}
+\item{data}{A data frame.}
+
+\item{y_var}{The name of the outcome variable in \code{data}. A character string.}
+
+\item{x_vars}{The names of the covariates in \code{data}. A vector of character strings.}
+
+\item{d_vars}{The names of the treatment variables in \code{data}. A vector of character strings.
+Either \code{d_vars} or \code{h_vars} must be specified.
+If \code{h_vars} is specified, \code{d_vars} will be ignored.}
+
+\item{h_vars}{A data frame containing the following fields: \code{d}, \code{fx}, and \code{fxd.name}.
+Each row represents a treatment variable interacted with a transformation of covariates.
+\code{d} is the name of the corresponding treatment variable in \code{data}.
+\code{fx} is the name of the covariate transformation in \code{data}.
+If this covariate transformation is not actually a transformation of a
+variable or set of variables in \code{x_vars}, then this function will not produce
+consistent estimates.
+\code{fxd.name} will be the name of the resulting interaction term (must be unique).
+Either \code{d_vars} or \code{h_vars} must be specified.
+If \code{h_vars} is specified, \code{d_vars} will be ignored.}
+
+\item{first_stage_family}{The type of prediction done in the first stage.
+Must be \code{'ols'} (Ordinary Least Squares), \code{'rf'} (Random Forest), or \code{'user-defined'}. If \code{'user-defined'}, then
+\code{predict_fun} must also be specified. Note that OLS prediction will not
+produce identical estimates to a long OLS regression including treatments
+and covariates because DML uses out-of-sample prediction.}
+
+\item{predict_fun}{The prediction function used in the first stage.
+It must take as parameters \code{data} (a data frame), \code{y_var} (name of outcome or treatment),
+and \code{x_vars} (names of covariates). It must return a list with a field
+\code{resids} that contains the residuals from predicting \code{y_var} using \code{x_vars}
+as a numeric vector of length \code{nrow(data)}.
+If \code{first_stage_family} == \code{'user-defined'}, then \code{predict_fun} must be specified.
+Otherwise, \code{predict_fun} will be ignored.}
+
+\item{second_stage_family}{Indicates how treatments are residualized.
+Can be \code{'mr'} (Multiple Residualization, the standard DML method),
+\code{'sr1'} (Single Residualization 1), or \code{'sr2'} (Single Residualization 2).}
+}
+\value{
+\code{dml.lm} returns an list containing the following components: \cr
+\tabular{ll}{
+\code{model}       \tab The \code{lm} object used to fit the second stage. The coefficients from this model are second-stage DML estimates. \cr
+\code{y_model}     \tab The object used to residualize the outcome variable \code{y_var} in the first stage. \cr
+\code{d_model}     \tab The object used to residualize the treatment variables \code{d_vars} in the first stage.
+}
 }
 \description{
 Estimates treatment effects by regressing outcome residuals on treatment
 residuals, where residuals come from predicting outcomes and treatments with
 covariates.
+}
+\details{
+\code{dml.lm} estimates Double Machine Learning (DML) models
+according to \insertCite{chernozhukov_doubledebiased_2018;textual}{riplDML}.
+In that framework, both treatment and outcome variables are residualized by
+a prediction function (the first stage), and then the outcome residuals are regressed on the
+treatment residuals (the second stage). \cr
+This procedure is able to control for large numbers of covariates (and
+covariate transformations) by incorporating variable selection (e.g.
+through LASSO or Random Forest) in the first stage. The estimates are
+consistent because both the treatments and the covariates have been
+residualized. \cr
+We allow for treatment effect heterogeneity according to the procedure
+summarized in \insertCite{semenova2017estimation;textual}{riplDML}. When defined, the
+parameter \code{h_vars} contains the set of treatments including covariate
+transformation interaction terms. \cr
+This function returns an \code{lm} object with default homoskedastic standard
+errors. That object can be passed into a \code{vcov}-style function to get
+heteroskedasticity-robust and/or cluster-robust standard errors. The
+errors from the second stage correspond to the score function estimators
+from \insertCite{chernozhukov_doubledebiased_2018;textual}{riplDML}, and the
+residualized outcome and treatments correspond to the components of the
+linear score.
+}
+\examples{
+
+data(iris)
+
+#
+# Using d_vars, no covariate interaction terms
+#
+
+# dml with OLS, RF prediction
+for(fam in c('ols', 'rf')){
+  model.dml.0 = dml.lm(iris, y_var='Sepal.Length', x_vars=c('Sepal.Width', 'Petal.Width'),
+                       d_vars='Petal.Length', first_stage_family=fam)
+  print(summary(model.dml.0$model)$coefficients)
+}
+
+# linear model, for comparison
+model.lm.0 = lm(Sepal.Length ~ Petal.Length + Sepal.Width + Petal.Width, data=iris)
+print(summary(model.lm.0)$coefficients)
+
+
+#
+# Using h_vars, yes covariate interaction terms
+#
+iris$sep.wid.2 = with(iris, Sepal.Width ^ 2)
+iris$pet.len.sep.wid.2 = with(iris, Petal.Length * sep.wid.2)
+iris$const = 1
+
+h_vars = data.frame(d=c('Petal.Length', 'Petal.Length', 'Petal.Width'),
+                    fx=c('const', 'sep.wid.2', 'const'),
+                    fxd.name=c('Petal.Length', 'pet.len.sep.wid.2', 'Petal.Width'))
+
+# dml with OLS, RF prediction
+for(fam in c('ols', 'rf')){
+  model.dml.1 = dml.lm(iris, y_var='Sepal.Length', x_vars=c('Sepal.Width'),
+                       h_vars=h_vars, first_stage_family=fam)
+  print(summary(model.dml.1$model)$coefficients)
+}
+
+# linear model, for comparison
+model.lm.0 = lm(Sepal.Length ~ Petal.Length + Sepal.Width +
+                  Petal.Width + pet.len.sep.wid.2, data=iris)
+print(summary(model.lm.0)$coefficients)
+}
+\references{
+{
+\insertRef{chernozhukov_doubledebiased_2018}{riplDML} \cr
+\insertRef{semenova2017estimation}{riplDML}
+}
 }

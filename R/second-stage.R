@@ -1,20 +1,123 @@
 
+#' dml.lm(): Fitting double/debiased machine learning (DML) models
+#'
 #' Estimates treatment effects by regressing outcome residuals on treatment
 #' residuals, where residuals come from predicting outcomes and treatments with
 #' covariates.
 #'
-#' @param data
-#' @param y_vars
-#' @param d_vars
-#' @param x_vars
-#' @param first_stage_family
-#' @param second_stage_family
-#' @param use_default_hyper
+#' @importFrom Rdpack reprompt
 #'
-#' @return
+#' @param data A data frame.
+#' @param y_var The name of the outcome variable in `data`. A character string.
+#' @param d_vars The names of the treatment variables in `data`. A vector of character strings.
+#' Either `d_vars` or `h_vars` must be specified.
+#' If `h_vars` is specified, `d_vars` will be ignored.
+#' @param x_vars The names of the covariates in `data`. A vector of character strings.
+#' @param h_vars A data frame containing the following fields: `d`, `fx`, and `fxd.name`.
+#' Each row represents a treatment variable interacted with a transformation of covariates.
+#' `d` is the name of the corresponding treatment variable in `data`.
+#' `fx` is the name of the covariate transformation in `data`.
+#' If this covariate transformation is not actually a transformation of a
+#' variable or set of variables in `x_vars`, then this function will not produce
+#' consistent estimates.
+#' `fxd.name` will be the name of the resulting interaction term (must be unique).
+#' Either `d_vars` or `h_vars` must be specified.
+#' If `h_vars` is specified, `d_vars` will be ignored.
+#' @param first_stage_family The type of prediction done in the first stage.
+#' Must be `'ols'` (Ordinary Least Squares), `'rf'` (Random Forest), or `'user-defined'`. If `'user-defined'`, then
+#' `predict_fun` must also be specified. Note that OLS prediction will not
+#' produce identical estimates to a long OLS regression including treatments
+#' and covariates because DML uses out-of-sample prediction.
+#' @param predict_fun The prediction function used in the first stage.
+#' It must take as parameters `data` (a data frame), `y_var` (name of outcome or treatment),
+#' and `x_vars` (names of covariates). It must return a list with a field
+#' `resids` that contains the residuals from predicting `y_var` using `x_vars`
+#' as a numeric vector of length `nrow(data)`.
+#' If `first_stage_family` == `'user-defined'`, then `predict_fun` must be specified.
+#' Otherwise, `predict_fun` will be ignored.
+#' @param second_stage_family Indicates how treatments are residualized.
+#' Can be `'mr'` (Multiple Residualization, the standard DML method),
+#' `'sr1'` (Single Residualization 1), or `'sr2'` (Single Residualization 2).
+# @param use_default_hyper placeholder
+#'
+#' @return `dml.lm` returns an list containing the following components: \cr
+#' \tabular{ll}{
+#'  `model`       \tab The `lm` object used to fit the second stage. The coefficients from this model are second-stage DML estimates. \cr
+#'  `y_model`     \tab The object used to residualize the outcome variable `y_var` in the first stage. \cr
+#'  `d_model`     \tab The object used to residualize the treatment variables `d_vars` in the first stage.
+#' }
+#'
+#' @details `dml.lm` estimates Double Machine Learning (DML) models
+#' according to \insertCite{chernozhukov_doubledebiased_2018;textual}{riplDML}.
+#' In that framework, both treatment and outcome variables are residualized by
+#' a prediction function (the first stage), and then the outcome residuals are regressed on the
+#' treatment residuals (the second stage). \cr
+#' This procedure is able to control for large numbers of covariates (and
+#' covariate transformations) by incorporating variable selection (e.g.
+#' through LASSO or Random Forest) in the first stage. The estimates are
+#' consistent because both the treatments and the covariates have been
+#' residualized. \cr
+#' We allow for treatment effect heterogeneity according to the procedure
+#' summarized in \insertCite{semenova2017estimation;textual}{riplDML}. When defined, the
+#' parameter `h_vars` contains the set of treatments including covariate
+#' transformation interaction terms. \cr
+#' This function returns an `lm` object with default homoskedastic standard
+#' errors. That object can be passed into a `vcov`-style function to get
+#' heteroskedasticity-robust and/or cluster-robust standard errors. The
+#' errors from the second stage correspond to the score function estimators
+#' from \insertCite{chernozhukov_doubledebiased_2018;textual}{riplDML}, and the
+#' residualized outcome and treatments correspond to the components of the
+#' linear score.
+#'
+#' @references{
+#'  \insertRef{chernozhukov_doubledebiased_2018}{riplDML} \cr
+#'  \insertRef{semenova2017estimation}{riplDML}
+#' }
+#'
 #' @export
 #'
 #' @examples
+#'
+#' data(iris)
+#'
+#' #
+#' # Using d_vars, no covariate interaction terms
+#' #
+#'
+#' # dml with OLS, RF prediction
+#' for(fam in c('ols', 'rf')){
+#'   model.dml.0 = dml.lm(iris, y_var='Sepal.Length', x_vars=c('Sepal.Width', 'Petal.Width'),
+#'                        d_vars='Petal.Length', first_stage_family=fam)
+#'   print(summary(model.dml.0$model)$coefficients)
+#' }
+#'
+#' # linear model, for comparison
+#' model.lm.0 = lm(Sepal.Length ~ Petal.Length + Sepal.Width + Petal.Width, data=iris)
+#' print(summary(model.lm.0)$coefficients)
+#'
+#'
+#' #
+#' # Using h_vars, yes covariate interaction terms
+#' #
+#' iris$sep.wid.2 = with(iris, Sepal.Width ^ 2)
+#' iris$pet.len.sep.wid.2 = with(iris, Petal.Length * sep.wid.2)
+#' iris$const = 1
+#'
+#' h_vars = data.frame(d=c('Petal.Length', 'Petal.Length', 'Petal.Width'),
+#'                     fx=c('const', 'sep.wid.2', 'const'),
+#'                     fxd.name=c('Petal.Length', 'pet.len.sep.wid.2', 'Petal.Width'))
+#'
+#' # dml with OLS, RF prediction
+#' for(fam in c('ols', 'rf')){
+#'   model.dml.1 = dml.lm(iris, y_var='Sepal.Length', x_vars=c('Sepal.Width'),
+#'                        h_vars=h_vars, first_stage_family=fam)
+#'   print(summary(model.dml.1$model)$coefficients)
+#' }
+#'
+#' # linear model, for comparison
+#' model.lm.0 = lm(Sepal.Length ~ Petal.Length + Sepal.Width +
+#'                   Petal.Width + pet.len.sep.wid.2, data=iris)
+#' print(summary(model.lm.0)$coefficients)
 dml.lm <- function(data
                    , y_var
                    , x_vars
@@ -26,6 +129,9 @@ dml.lm <- function(data
                    , ...){
   out = list()
 
+  ## evaluate choices
+  first_stage_family <- match.arg(first_stage_family)
+  second_stage_family <- match.arg(second_stage_family)
 
   if(is.null(d_vars)){
     if(second_stage_family %in% c('sr1', 'sr2')){
@@ -74,6 +180,12 @@ dml.lm <- function(data
 
       d_vars = unique(h_vars$d)
 
+      tmp1 = duplicated(h_vars$fxd.name)
+      if(any(tmp1)){
+        stop(paste('h_vars$fxd.name must be unique;',
+                   h_vars$fxd.name[tmp1][1], 'is duplicated'))
+      }
+
       # Predict treatments
       d_models <- lapply(d_vars, function(d_var) predict.dml(data
                                                              , y_var = d_var
@@ -81,7 +193,7 @@ dml.lm <- function(data
                                                              , family = first_stage_family
                                                              , ...))
 
-      d_resids <- d_models %>% lapply(purrr::pluck, 'resids')
+      d_resids <- as.data.frame(do.call(cbind, d_models %>% lapply(purrr::pluck, 'resids')))
       names(d_resids) <- d_vars
       out$d_model <- d_models
 
@@ -91,7 +203,8 @@ dml.lm <- function(data
       # fx - the (transformation of the) covariates
       # fxd.name - the name of this combined variable in the second stage
       reg.data <- data.frame(y_resids)
-      reg.data[, h_vars$fxd.name] <- data[, h_vars$fx] * purrr::pluck(d_resids, h_vars$d)
+      # reg.data[, h_vars$fxd.name] <- data[, h_vars$fx] * purrr::pluck(d_resids, h_vars$d)
+      reg.data[, h_vars$fxd.name] <- data[, h_vars$fx] * d_resids[, h_vars$d]
     }
   }else if(second_stage_family %in% c('sr1', 'sr2')){
     if(!is.null(h_vars)){
@@ -152,16 +265,16 @@ dml.lm <- function(data
 #' residuals, where residuals come from predicting outcomes and treatments with
 #' covariates.
 #'
-#' @param formula
-#' @param data
-#' @param first_stage_family
-#' @param second_stage_family
-#' @param use_default_hyper
+#' @param formula placeholder
+#' @param data placeholder
+#' @param first_stage_family placeholder
+#' @param second_stage_family placeholder
+#' @param use_default_hyper placeholder
 #'
-#' @return
-#' @export
+#' @return placeholder
+# @export
 #'
-#' @examples
+#' @examples placeholder
 dml.lm.wrapper <- function(formula
                            , data
                            , first_stage_family = c('ols', 'rf', 'lasso', 'user-defined')

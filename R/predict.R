@@ -3,17 +3,15 @@
 #' residuals, where residuals come from predicting outcomes and treatments with
 #' covariates.
 #'
-#' @param data
-#' @param y_vars
-#' @param d_vars
-#' @param x_vars
-#' @param family
-#' @param second_stage
-#' @param use_default_hyper
-#' @return
-#' @export
+#' @param data placeholder
+#' @param y_vars placeholder
+#' @param x_vars placeholder
+#' @param family placeholder
+#' @param seed placeholder
+#' @return placeholder
+# @export
 #'
-#' @examples
+#' @examples placeholder
 predict.dml <- function(data
                         , y_var
                         , x_vars

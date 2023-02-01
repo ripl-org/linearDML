@@ -2,6 +2,7 @@ START_TIME = Sys.time()
 
 library(dplyr)
 library(reshape)
+library(stringr)
 
 devtools::load_all()
 
@@ -9,8 +10,8 @@ script.name = basename(sys.frame(1)$ofile)
 script.dir = dirname(sys.frame(1)$ofile)
 
 
-NSIM = 200
-NOBS = 500
+NSIM = 50
+NOBS = 10000
 sim.0 = expand.grid(id=1:NOBS, sim=1:NSIM)
 
 set.seed(20220822)
@@ -226,7 +227,7 @@ f11 = solve(f10) %*% f9
 # f14 = f13 - rbind(b1, b2)
 
 sim.7[3:4, 'approx.bias'] = f11[1:2, 1]
-
+month.name(5)
 print(script.dir)
 setwd(script.dir)
 
