@@ -123,7 +123,7 @@ dml.lm <- function(data
                    , x_vars
                    , d_vars = NULL
                    , h_vars = NULL
-                   , first_stage_family = c('ols', 'rf', 'lasso', 'user-defined')
+                   , first_stage_family = c('ols', 'rf', 'user-defined')
                    , predict_fun = NULL
                    , second_stage_family = c('mr', 'sr1', 'sr2')
                    , ...){
@@ -147,8 +147,8 @@ dml.lm <- function(data
   }
 
   if(!is.null(d_vars)){
-    factor_d_names <- names(select(data, d_vars))[ sapply(select(data, d_vars) , is.factor)]
-    non_factor_d_names <- names(select(data, d_vars))[ sapply(select(data, d_vars), function(x) !is.factor(x))]
+    factor_d_names <- names(dplyr::select(data, d_vars))[ sapply(dplyr::select(data, d_vars) , is.factor)]
+    non_factor_d_names <- names(dplyr::select(data, d_vars))[ sapply(dplyr::select(data, d_vars), function(x) !is.factor(x))]
 
     if(length(factor_d_names) > 0){
       factor_names_str <- paste(factor_d_names, sep = ',')
