@@ -146,6 +146,24 @@ dml.lm <- function(data
     stop('dml.lm: length(y_var) != 1')
   }
 
+  if(!is.null(d_vars)){
+    factor_d_names <- names(select(data, d_vars))[ sapply(select(data, d_vars) , is.factor)]
+    non_factor_d_names <- names(select(data, d_vars))[ sapply(select(data, d_vars), function(x) !is.factor(x))]
+
+    if(length(factor_d_names) > 0){
+      factor_names_str <- paste(factor_d_names, sep = ',')
+      message(paste0('Converting factors ', factor_names_str, ' to dummy columns.'))
+
+      old_colnames <- colnames(data)
+      data <- data %>% fastDummies::dummy_cols(factor_d_names)
+      new_factor_cols <- setdiff(colnames(data), old_colnames)
+
+      #reform d_vars to use the dummy column names
+      d_vars <- c(non_factor_d_names, new_factor_cols)
+
+    }
+  }
+
   if(first_stage_family == 'user-defined'){
     if(is.null(predict_fun)){
       stop(paste('dml.lm: if prediction is user-defined, predict_fun must be',
