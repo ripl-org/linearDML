@@ -142,6 +142,10 @@ dml.lm <- function(data
     }
   }
 
+  if(length(y_var) != 1){
+    stop('dml.lm: length(y_var) != 1')
+  }
+
   if(first_stage_family == 'user-defined'){
     if(is.null(predict_fun)){
       stop(paste('dml.lm: if prediction is user-defined, predict_fun must be',
