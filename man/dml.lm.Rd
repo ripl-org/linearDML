@@ -10,7 +10,7 @@ dml.lm(
   x_vars,
   d_vars = NULL,
   h_vars = NULL,
-  first_stage_family = c("ols", "rf", "lasso", "user-defined"),
+  first_stage_family = c("ols", "rf", "user-defined"),
   predict_fun = NULL,
   second_stage_family = c("mr", "sr1", "sr2"),
   ...
@@ -71,7 +71,7 @@ covariates.
 }
 \details{
 \code{dml.lm} estimates Double Machine Learning (DML) models
-according to \insertCite{chernozhukov_doubledebiased_2018;textual}{riplDML}.
+according to \insertCite{chernozhukov_doubledebiased_2018;textual}{linearDML}.
 In that framework, both treatment and outcome variables are residualized by
 a prediction function (the first stage), and then the outcome residuals are regressed on the
 treatment residuals (the second stage). \cr
@@ -81,14 +81,14 @@ through LASSO or Random Forest) in the first stage. The estimates are
 consistent because both the treatments and the covariates have been
 residualized. \cr
 We allow for treatment effect heterogeneity according to the procedure
-summarized in \insertCite{semenova2017estimation;textual}{riplDML}. When defined, the
+summarized in \insertCite{semenova2017estimation;textual}{linearDML}. When defined, the
 parameter \code{h_vars} contains the set of treatments including covariate
 transformation interaction terms. \cr
 This function returns an \code{lm} object with default homoskedastic standard
 errors. That object can be passed into a \code{vcov}-style function to get
 heteroskedasticity-robust and/or cluster-robust standard errors. The
 errors from the second stage correspond to the score function estimators
-from \insertCite{chernozhukov_doubledebiased_2018;textual}{riplDML}, and the
+from \insertCite{chernozhukov_doubledebiased_2018;textual}{linearDML}, and the
 residualized outcome and treatments correspond to the components of the
 linear score.
 }
@@ -137,7 +137,7 @@ print(summary(model.lm.0)$coefficients)
 }
 \references{
 {
-\insertRef{chernozhukov_doubledebiased_2018}{riplDML} \cr
-\insertRef{semenova2017estimation}{riplDML}
+\insertRef{chernozhukov_doubledebiased_2018}{linearDML} \cr
+\insertRef{semenova2017estimation}{linearDML}
 }
 }
