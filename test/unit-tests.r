@@ -66,7 +66,29 @@ test_dml.lm_second_stage_family <- function(){
   model.4 = dml.lm(iris, y_var='Sepal.Length', x_vars=c('Sepal.Width', 'Petal.Width'),
                    d_vars='Species', first_stage_family='rf', second_stage_family='sr2')
 
-  print('test_dml.lm_first_stage_family test completed')
+  print('test_dml.lm_second_stage_family test completed')
+}
+
+test_dml.lm_h_vars <- function(){
+  data(iris)
+
+  iris$sep.wid.2 = with(iris, Sepal.Width ^ 2)
+  iris$pet.len.sep.wid.2 = with(iris, Petal.Length * sep.wid.2)
+  iris$const = 1
+
+  h_vars = data.frame(d=c('Petal.Length', 'Petal.Length', 'Petal.Width'),
+                      fx=c('const', 'sep.wid.2', 'const'),
+                      fxd.name=c('Petal.Length', 'pet.len.sep.wid.2', 'Petal.Width'))
+  model.0 = dml.lm(iris, y_var='Sepal.Length', x_vars=c('Sepal.Width'),
+                   h_vars=h_vars, first_stage_family='ols')
+
+  h_vars = data.frame(d=c('Petal.Length'),
+                      fx=c('const'),
+                      fxd.name=c('Petal.Length'))
+  model.1 = dml.lm(iris, y_var='Sepal.Length', x_vars=c('Sepal.Width', 'Petal.Width'),
+                   h_vars=h_vars, first_stage_family='ols')
+
+  print('test_dml.lm_h_vars test completed')
 }
 
 
@@ -79,6 +101,7 @@ test_dml.lm_x_vars()
 test_dml.lm_d_vars()
 test_dml.lm_first_stage_family()
 test_dml.lm_second_stage_family()
+test_dml.lm_h_vars()
 
 
 
