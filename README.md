@@ -2,7 +2,8 @@
 
 ## Overview
 
-`linearDML` implements double/debiased machine learning (DML) Chernozhukov et al. (2018) and adds a method for flexibly specifying interactions with treatment variables.
+`linearDML` implements double/debiased machine learning (DML) [Chernozhukov et al. (2018)](https://doi.org/10.1111/ectj.12097) and adds a method for flexibly specifying interactions with treatment variables.
+
 
 ## Usage
 
@@ -55,11 +56,14 @@ You can install the latest version of `linearDML` from Github using the followin
 devtools::install_github('ripl-org/linearDML')
 ```
 
+## References
+
+Chernozhukov, V., Chetverikov, D., Demirer, M., Duflo, E., Hansen, C., Newey, W. and Robins, J. (2018),
+Double/debiased machine learning for treatment and structural parameters. The Econometrics Journal, 21: C1-C68. doi:[10.1111/ectj.12097](https://doi.org/10.1111/ectj.12097).
+
 
 ## License
 [LICENSE](LICENSE)
 
 Copyright 2023 Innovative Policy Lab d/b/a Research Improving People's Lives
 ("RIPL"), Providence, RI. All Rights Reserved.
-
-## References
