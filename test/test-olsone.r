@@ -94,7 +94,7 @@ fold.id.0 = c(t(matrix(c(1, 2), nrow=2, ncol=NOBS/2)))
 
 #
 # Estimation of one simulation at a time
-# using riplDML
+# using linearDML
 #
 for(i in 1:NSIM){
   if((i %% 10) == 1){

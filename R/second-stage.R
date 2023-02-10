@@ -48,7 +48,7 @@
 #' }
 #'
 #' @details `dml.lm` estimates Double Machine Learning (DML) models
-#' according to \insertCite{chernozhukov_doubledebiased_2018;textual}{riplDML}.
+#' according to \insertCite{chernozhukov_doubledebiased_2018;textual}{linearDML}.
 #' In that framework, both treatment and outcome variables are residualized by
 #' a prediction function (the first stage), and then the outcome residuals are regressed on the
 #' treatment residuals (the second stage). \cr
@@ -58,20 +58,20 @@
 #' consistent because both the treatments and the covariates have been
 #' residualized. \cr
 #' We allow for treatment effect heterogeneity according to the procedure
-#' summarized in \insertCite{semenova2017estimation;textual}{riplDML}. When defined, the
+#' summarized in \insertCite{semenova2017estimation;textual}{linearDML}. When defined, the
 #' parameter `h_vars` contains the set of treatments including covariate
 #' transformation interaction terms. \cr
 #' This function returns an `lm` object with default homoskedastic standard
 #' errors. That object can be passed into a `vcov`-style function to get
 #' heteroskedasticity-robust and/or cluster-robust standard errors. The
 #' errors from the second stage correspond to the score function estimators
-#' from \insertCite{chernozhukov_doubledebiased_2018;textual}{riplDML}, and the
+#' from \insertCite{chernozhukov_doubledebiased_2018;textual}{linearDML}, and the
 #' residualized outcome and treatments correspond to the components of the
 #' linear score.
 #'
 #' @references{
-#'  \insertRef{chernozhukov_doubledebiased_2018}{riplDML} \cr
-#'  \insertRef{semenova2017estimation}{riplDML}
+#'  \insertRef{chernozhukov_doubledebiased_2018}{linearDML} \cr
+#'  \insertRef{semenova2017estimation}{linearDML}
 #' }
 #'
 #' @export
