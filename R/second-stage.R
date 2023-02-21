@@ -170,7 +170,7 @@ dml.lm <- function(data
                  'function(data, y_var, x_vars) returning list(predictions, resids)', sep=''))
     }
   }else{
-    predict_fun <- function(data, y_var, x_vars){
+    predict_fun <- function(data, y_var, x_vars, ...){
       return(predict.dml(data, y_var = y_var, x_vars = x_vars, family = first_stage_family, ...))
     }
   }
@@ -184,10 +184,9 @@ dml.lm <- function(data
       # y_hat ~ sum_j d_hat_j
 
     # Predict outcomes and treatments
-    d_models <- lapply(d_vars, function(d_var) predict.dml(data
+    d_models <- lapply(d_vars, function(d_var) predict_fun(data
                                                            , y_var = d_var
                                                            , x_vars = x_vars
-                                                           , family = first_stage_family
                                                            , ...))
 
     d_resids <- d_models %>% lapply(purrr::pluck, 'resids')
@@ -209,10 +208,9 @@ dml.lm <- function(data
       }
 
       # Predict treatments
-      d_models <- lapply(d_vars, function(d_var) predict.dml(data
+      d_models <- lapply(d_vars, function(d_var) predict_fun(data
                                                              , y_var = d_var
                                                              , x_vars = x_vars
-                                                             , family = first_stage_family
                                                              , ...))
 
       d_resids <- as.data.frame(do.call(cbind, d_models %>% lapply(purrr::pluck, 'resids')))

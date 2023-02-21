@@ -8,6 +8,7 @@
 #' @param x_vars placeholder
 #' @param family placeholder
 #' @param seed placeholder
+#' @param foldid placeholder
 #' @return placeholder
 # @export
 #'
@@ -17,6 +18,7 @@ predict.dml <- function(data
                         , x_vars
                         , family = 'ols'
                         , seed = 10272022
+                        , foldid = NULL
                         , ...){
   x_data <- dplyr::select(data, dplyr::all_of(x_vars))
   y_data <- dplyr::pull(data, y_var)
@@ -46,7 +48,11 @@ predict.dml <- function(data
 
   #split data into two folds
   nobs <- nrow(x_data)
-  foldid <- rep.int(1:2, times = ceiling(nobs / 2))[sample.int(nobs)]
+
+  if(is.null(foldid)){
+    foldid <- rep.int(1:2, times = ceiling(nobs / 2))[sample.int(nobs)]
+  }
+
   I <- split(1:nobs, foldid)
   fold1_indices <- I[[1]]
   fold2_indices <- I[[2]]
@@ -117,7 +123,8 @@ fit_cv_rf <- function(data
                       , rf_mode = "regression"
                       , use_default_hyper = TRUE
                       , trees = NULL
-                      , min_n = NULL){
+                      , min_n = NULL
+                      , mtry = NULL){
 
 
   model_spec_default <- parsnip::rand_forest() %>%
@@ -129,9 +136,9 @@ fit_cv_rf <- function(data
     return(model_spec_default)
   }
 
-  if(!is.null(trees)&!is.null(min_n)){
+  if(!is.null(trees)&!is.null(min_n) & !is.null(mtry)){
     message("Using user supplied random forest hyperparameters")
-    model_spec <- parsnip::rand_forest(trees = trees, min_n = min_n) %>%
+    model_spec <- parsnip::rand_forest(trees = trees, min_n = min_n, mtry=mtry) %>%
       parsnip::set_mode(mode = rf_mode) %>%
       parsnip::set_engine("ranger")
 

@@ -3,9 +3,28 @@ START_TIME = Sys.time()
 library(dplyr)
 library(reshape)
 
+library(DoubleML)
+library(mlr3)
+library(mlr3learners)
+# library(data.table)
 devtools::load_all()
 
+
 script.name = basename(sys.frame(1)$ofile)
+script.dir = dirname(sys.frame(1)$ofile)
+
+
+lgr::get_logger("mlr3")$set_threshold("warn")
+
+NTREES = 100
+# M_TRY = 1
+MIN_N = 2
+# learner = lrn("regr.ranger", num.trees = 100, mtry = 20, min.node.size = 2, max.depth = 5)
+# learner = lrn("regr.ranger", num.trees = NTREES, min.node.size = MIN_N)
+# ml_l = learner$clone()
+# ml_m = learner$clone()
+# set.seed(1111)
+# data = make_plr_CCDDHNR2018(alpha=0.5, n_obs=500, dim_x=20, return_type='data.table')
 
 
 NSIM = 50
@@ -145,13 +164,36 @@ for(i in 1:NSIM){
     model.0 = dml.lm(sim.3, 'y', c('w1', 'w2'), d_vars = c('x1', 'x2'),
                      first_stage_family = 'ols', second_stage_family = vv,
                      foldid=fold.id.0)
-    coeff.0 = as.data.frame(summary(model.0)$coefficients)
+    coeff.0 = as.data.frame(summary(model.0$model)$coefficients)
 
     tmp1 = paste('b1.hat', vv, sep='.')
     tmp2 = paste('b2.hat', vv, sep='.')
     sim.1[i, c(tmp1, tmp2)] = coeff.0[c('x1', 'x2'), 'Estimate']
   }
 
+  # options(warn=-1)
+  model.0 = suppressMessages(dml.lm(sim.3, 'y', c('w1', 'w2'), d_vars = c('x1', 'x2'),
+                   first_stage_family = 'rf', second_stage_family = 'mr',
+                   trees=NTREES, min_n = MIN_N, mtry= 2))
+  # options(warn=0)
+  coeff.0 = as.data.frame(summary(model.0$model)$coefficients)
+  sim.1[i, c('b1.hat.rf', 'b2.hat.rf')] = coeff.0[c('x1', 'x2'), 'Estimate']
+
+  # learner = lrn("regr.ranger", num.trees = 100, mtry = 20, min.node.size = 2, max.depth = 5)
+  learner = lrn("regr.ranger", num.trees = NTREES, mtry=2, min.node.size=MIN_N)
+  ml_l = learner$clone()
+  ml_m = learner$clone()
+  obj_dml_data = suppressMessages(DoubleMLData$new(sim.3[, 2:6], y_col="y", d_cols=c('x1', 'x2')))
+  dml_plr_obj = suppressMessages(DoubleMLPLR$new(obj_dml_data, ml_l, ml_m, n_folds=2))
+  suppressMessages(dml_plr_obj$fit())
+
+  # dml_plr_obj$n_folds
+
+  # c(dml_plr_obj$all_coef)
+  sim.1[i, c('b1.hat.dub', 'b2.hat.dub')] = c(dml_plr_obj$coef)
+  # stop('here 179')
+  # dml_plr_obj
+  # print(dml_plr_obj)
   # stop('here 126')
 }
 
@@ -168,18 +210,36 @@ sim.1$b2.hat.dsr1 = abs(sim.1$b2.hat.sr1 - sim.1$b2.hat4)
 sim.1$b1.hat.dsr2 = abs(sim.1$b1.hat.sr2 - sim.1$b1.hat5)
 sim.1$b2.hat.dsr2 = abs(sim.1$b2.hat.sr2 - sim.1$b2.hat5)
 
-sim.1$one = 1
-sim.4 = sim.1 %>%
-  summarize(nsim=sum(one),
-            b1.hat.d0=sum(b1.hat.d0),
-            b2.hat.d0=sum(b2.hat.d0),
-            b1.hat.dmr=sum(b1.hat.dmr),
-            b2.hat.dmr=sum(b2.hat.dmr),
-            b1.hat.dsr1=sum(b1.hat.dsr1),
-            b2.hat.dsr1=sum(b2.hat.dsr1),
-            b1.hat.dsr2=sum(b1.hat.dsr2),
-            b2.hat.dsr2=sum(b2.hat.dsr2))
+sim.1$b1.hat.drf = abs(sim.1$b1.hat.rf - sim.1$b1)
+sim.1$b2.hat.drf = abs(sim.1$b2.hat.rf - sim.1$b2)
 
+sim.1$b1.hat.ddub = abs(sim.1$b1 - sim.1$b1.hat.dub)
+sim.1$b2.hat.ddub = abs(sim.1$b2 - sim.1$b2.hat.dub)
+
+sim.1$b1.hat.dcmp = abs(sim.1$b1.hat.rf - sim.1$b1.hat.dub)
+sim.1$b2.hat.dcmp = abs(sim.1$b2.hat.rf - sim.1$b2.hat.dub)
+
+measure.vars.0 = c('d0', 'dmr', 'dsr1', 'dsr2', 'drf', 'ddub', 'dcmp')
+measure.vars.1 = c(paste('b1.hat', measure.vars.0, sep='.'),
+                   paste('b2.hat', measure.vars.0, sep='.'))
+sim.4 = as.data.frame(melt(sim.1, id.vars='sim',
+                           measure.vars=measure.vars.1))
+sim.4$one = 1
+sim.4$coeff = substr(sim.4$variable, 1, 2)
+sim.4$diff.pair = substr(sim.4$variable, 8, 20)
+
+sim.5 = sim.4 %>%
+  group_by(diff.pair, coeff) %>%
+  summarize(obs=sum(one),
+            mean.abs.diff=mean(value),
+            rt.mn.sq.diff=sqrt(mean(value^2)),
+            .groups='keep')
+sim.5 = as.data.frame(sim.5)
+
+print(script.dir)
+setwd(script.dir)
+
+write.csv(sim.5, 'test-olsone.csv', row.names=F)
 
 
 #===========================================================
