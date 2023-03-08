@@ -138,11 +138,11 @@ fit_cv_rf <- function(data
   }
 
 
-  if(!is.null(trees)& !is.null(min_n) & !is.null(mtry)){
+  if(!is.null(trees)& !is.null(min_n) & !is.null(mtry) & !is.null(max_depth)){
     message("Using user supplied random forest hyperparameters")
     model_spec <- parsnip::rand_forest(trees = trees, min_n = min_n, mtry = mtry) %>%
       parsnip::set_mode(mode = rf_mode) %>%
-      parsnip::set_engine("ranger", min.node.size = min_n, num.trees = trees, max.depth = max_depth)
+      parsnip::set_engine("ranger", max.depth = max_depth)
 
     return(model_spec)
   }
@@ -168,7 +168,7 @@ fit_cv_rf <- function(data
 
   model_spec <- parsnip::rand_forest() %>%
     parsnip::set_mode(mode = rf_mode) %>%
-    parsnip::set_engine("ranger", num.trees = trees, mtry = mtry, min.node.size = min_n)
+    parsnip::set_engine("ranger", max.depth = max_depth)
 
   if(is.null(trees)){
     best_trees <- best_hyper_parameters$trees
