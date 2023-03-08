@@ -117,7 +117,9 @@ fit_cv_rf <- function(data
                       , rf_mode = "regression"
                       , use_default_hyper = TRUE
                       , trees = NULL
-                      , min_n = NULL){
+                      , min_n = NULL
+                      , max_depth = NULL
+                      , mtry = NULL){
 
 
   model_spec_default <- parsnip::rand_forest() %>%
@@ -129,24 +131,26 @@ fit_cv_rf <- function(data
     return(model_spec_default)
   }
 
-  if(!is.null(trees)&!is.null(min_n)){
+  if(!is.null(trees)&!is.null(min_n)&!is.null(mtry)&!is.null(max_depth)){
     message("Using user supplied random forest hyperparameters")
-    model_spec <- parsnip::rand_forest(trees = trees, min_n = min_n) %>%
+    model_spec <- parsnip::rand_forest(trees = trees, min_n = min_n, mtry = mtry) %>%
       parsnip::set_mode(mode = rf_mode) %>%
-      parsnip::set_engine("ranger")
+      parsnip::set_engine("ranger", min.node.size = min_n, num.trees = trees, max.depth = max_depth)
 
     return(model_spec)
   }
 
 
-  model_spec_tune <- parsnip::rand_forest(trees = tune(), min_n = tune()) %>%
+  model_spec_tune <- parsnip::rand_forest(trees = tune(), min_n = tune(), mtry = tune()) %>%
     parsnip::set_mode(mode = rf_mode) %>%
-    parsnip::set_engine("ranger")
+    parsnip::set_engine("ranger", max.depth = max_depth)
 
   if(!is.null(trees))
-    model_spec_tune  <- model_spec_tune %>% set_args(trees = trees)
+    model_spec_tune  <- model_spec_tune %>% set_args(trees = {{trees}})
   if(!is.null(min_n))
-    model_spec_tune  <- model_spec_tune %>% update(min_n = min_n)
+    model_spec_tune  <- model_spec_tune %>% set_args(min_n = {{min_n}})
+  if(!is.null(mtry))
+    model_spec_tune  <- model_spec_tune %>% set_args(mtry = {{mtry}})
 
 
   message("Tuning random forest hyperparameters")
@@ -158,15 +162,26 @@ fit_cv_rf <- function(data
     parsnip::set_mode(mode = rf_mode) %>%
     parsnip::set_engine("ranger")
 
-  if(is.null(trees))
-    model_spec <- model_spec %>% set_args(trees = best_hyper_parameters$trees)
+  if(is.null(trees)){
+    best_trees <- best_hyper_parameters$trees
+    model_spec <- model_spec %>% set_args(trees = {{best_trees}})
+  }
   else
-    model_spec <- model_spec %>% set_args(trees = trees)
+    model_spec <- model_spec %>% set_args(trees = {{trees}})
 
-  if(is.null(min_n))
-    model_spec <- model_spec %>% set_args(min_n = best_hyper_parameters$min_n)
+  if(is.null(min_n)){
+    best_min_n <- best_hyper_parameters$min_n
+    model_spec <- model_spec %>% set_args(min_n = {{best_min_n}})
+  }
   else
-    model_spec <- model_spec %>% set_args(min_n = min_n)
+    model_spec <- model_spec %>% set_args(min_n = {{min_n}})
+
+  if(is.null(mtry)){
+    best_mtry <- best_hyper_parameters$mtry
+    model_spec <- model_spec %>% set_args(mtry = {{best_mtry}})
+  }
+  else
+    model_spec <- model_spec %>% set_args(mtry = {{mtry}})
 
   model_spec
 }
