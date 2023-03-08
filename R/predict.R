@@ -153,11 +153,11 @@ fit_cv_rf <- function(data
     parsnip::set_engine("ranger", max.depth = max_depth)
 
   if(!is.null(trees))
-    model_spec_tune  <- model_spec_tune %>% set_args(trees = {{trees}})
+    model_spec_tune  <- model_spec_tune %>% parsnip::set_args(trees = {{trees}})
   if(!is.null(min_n))
-    model_spec_tune  <- model_spec_tune %>% set_args(min_n = {{min_n}})
+    model_spec_tune  <- model_spec_tune %>% parsnip::set_args(min_n = {{min_n}})
   if(!is.null(mtry))
-    model_spec_tune  <- model_spec_tune %>% set_args(mtry = {{mtry}})
+    model_spec_tune  <- model_spec_tune %>% parsnip::set_args(mtry = {{mtry}})
 
 
 
@@ -172,29 +172,29 @@ fit_cv_rf <- function(data
 
   if(is.null(trees)){
     best_trees <- best_hyper_parameters$trees
-    model_spec <- model_spec %>% set_args(trees = {{best_trees}})
+    model_spec <- model_spec %>% parsnip::set_args(trees = {{best_trees}})
   }
   else
-    model_spec <- model_spec %>% set_args(trees = {{trees}})
+    model_spec <- model_spec %>% parsnip::set_args(trees = {{trees}})
 
   if(is.null(min_n)){
     best_min_n <- best_hyper_parameters$min_n
-    model_spec <- model_spec %>% set_args(min_n = {{best_min_n}})
+    model_spec <- model_spec %>% parsnip::set_args(min_n = {{best_min_n}})
   }
   else
-    model_spec <- model_spec %>% set_args(min_n = {{min_n}})
+    model_spec <- model_spec %>% parsnip::set_args(min_n = {{min_n}})
 
   if(is.null(mtry)){
     best_mtry <- best_hyper_parameters$mtry
-    model_spec <- model_spec %>% set_args(mtry = {{best_mtry}})
+    model_spec <- model_spec %>% parsnip::set_args(mtry = {{best_mtry}})
   }
   else
-    model_spec <- model_spec %>% set_args(mtry = {{mtry}})
+    model_spec <- model_spec %>% parsnip::set_args(mtry = {{mtry}})
 
   if(is.null(mtry))
-    model_spec <- model_spec %>% set_args(mtry = best_hyper_parameters$mtry)
+    model_spec <- model_spec %>% parsnip::set_args(mtry = best_hyper_parameters$mtry)
   else
-    model_spec <- model_spec %>% set_args(mtry = mtry)
+    model_spec <- model_spec %>% parsnip::set_args(mtry = mtry)
 
   model_spec
 }
