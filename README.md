@@ -7,7 +7,7 @@
 
 ## Usage
 
-`dml.lm` is the workhorse function of `linearDML`. Along with first and second stage DML estimates, `dml.lm` always returns an `lm` object with the average treatment effect
+`dml.lm` is the workhorse function of `linearDML`. Along with first stage DML predictions, `dml.lm` returns an `lm` object containing estimates from the second stage.
 
 ```r
 # dml with RF predictions

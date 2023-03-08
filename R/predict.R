@@ -8,6 +8,7 @@
 #' @param x_vars placeholder
 #' @param family placeholder
 #' @param seed placeholder
+#' @param foldid placeholder
 #' @return placeholder
 # @export
 #'
@@ -17,6 +18,7 @@ predict.dml <- function(data
                         , x_vars
                         , family = 'ols'
                         , seed = 10272022
+                        , foldid = NULL
                         , ...){
   x_data <- dplyr::select(data, dplyr::all_of(x_vars))
   y_data <- dplyr::pull(data, y_var)
@@ -46,7 +48,11 @@ predict.dml <- function(data
 
   #split data into two folds
   nobs <- nrow(x_data)
-  foldid <- rep.int(1:2, times = ceiling(nobs / 2))[sample.int(nobs)]
+
+  if(is.null(foldid)){
+    foldid <- rep.int(1:2, times = ceiling(nobs / 2))[sample.int(nobs)]
+  }
+
   I <- split(1:nobs, foldid)
   fold1_indices <- I[[1]]
   fold2_indices <- I[[2]]
@@ -126,12 +132,13 @@ fit_cv_rf <- function(data
     parsnip::set_mode(mode = rf_mode) %>%
     parsnip::set_engine("ranger")
 
-  if(use_default_hyper & is.null(trees) & is.null(min_n)){
+  if(use_default_hyper & is.null(trees) & is.null(min_n) & is.null(mtry)){
     message("Using default random forest hyperparameters")
     return(model_spec_default)
   }
 
-  if(!is.null(trees)&!is.null(min_n)&!is.null(mtry)&!is.null(max_depth)){
+
+  if(!is.null(trees)& !is.null(min_n) & !is.null(mtry)){
     message("Using user supplied random forest hyperparameters")
     model_spec <- parsnip::rand_forest(trees = trees, min_n = min_n, mtry = mtry) %>%
       parsnip::set_mode(mode = rf_mode) %>%
@@ -153,6 +160,7 @@ fit_cv_rf <- function(data
     model_spec_tune  <- model_spec_tune %>% set_args(mtry = {{mtry}})
 
 
+
   message("Tuning random forest hyperparameters")
 
 
@@ -160,7 +168,7 @@ fit_cv_rf <- function(data
 
   model_spec <- parsnip::rand_forest() %>%
     parsnip::set_mode(mode = rf_mode) %>%
-    parsnip::set_engine("ranger")
+    parsnip::set_engine("ranger", num.trees = trees, mtry = mtry, min.node.size = min_n)
 
   if(is.null(trees)){
     best_trees <- best_hyper_parameters$trees
@@ -182,6 +190,11 @@ fit_cv_rf <- function(data
   }
   else
     model_spec <- model_spec %>% set_args(mtry = {{mtry}})
+
+  if(is.null(mtry))
+    model_spec <- model_spec %>% set_args(mtry = best_hyper_parameters$mtry)
+  else
+    model_spec <- model_spec %>% set_args(mtry = mtry)
 
   model_spec
 }
