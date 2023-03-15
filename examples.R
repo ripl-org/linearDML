@@ -1,12 +1,11 @@
 library(causaldata)
 library(dplyr)
 library(tidyr)
-
-devtools::load_all()
+library(linearDML)
 
 df <- nsw_mixtape %>%
   as.data.frame() %>%
-  mutate(treat =  as.logical(treat)
+  dplyr::mutate(treat =  as.logical(treat)
          , not_treated = !treat
          , nodegree_treated = treat*nodegree
          , degree_treated = treat*!nodegree)
@@ -39,3 +38,57 @@ dml.lm(data = df
        , d_vars = c('not_treated')
        , first_stage_family = 'rf'
        , second_stage_family = 'mr')
+
+
+
+dml.lm(data = df
+       , x_vars = c('age', 'black', 'hisp', 'marr', 're74', 're75')
+       , y_var = 're78'
+       , d_vars = c('not_treated')
+       , first_stage_family = 'rf'
+       , second_stage_family = 'mr'
+       , mtry = 3
+       , max_depth = 2)
+
+dml.lm(data = df
+       , x_vars = c('age', 'black', 'hisp', 'marr', 're74', 're75')
+       , y_var = 're78'
+       , d_vars = c('not_treated')
+       , first_stage_family = 'rf'
+       , second_stage_family = 'mr'
+       , mtry = 3
+       , trees = 100)
+
+dml.lm(data = df
+       , x_vars = c('age', 'black', 'hisp', 'marr', 're74', 're75')
+       , y_var = 're78'
+       , d_vars = c('not_treated')
+       , first_stage_family = 'rf'
+       , second_stage_family = 'mr'
+       , mtry = 3
+       , trees = 100
+       , max_depth = 2
+       , min_n = 2)
+
+
+nnet_predict_fun <- function(data, y_var, x_vars){
+  y <- data %>% pull(y_var)
+
+  formula <- as.formula(paste(y_var, paste(x_vars, collapse=" + "), sep=" ~ "))
+
+  model <- neuralnet::neuralnet(formula, data)
+  y_hat <- predict(model, newdata = data)
+
+  resids <- y - y_hat
+
+  list(resids = resids)
+}
+
+tst <- nnet_predict_fun(data = df, y_var = 're78', x_vars = c('age', 'black', 'hisp', 'marr', 're74', 're75'))
+
+dml.lm(data = df
+       , x_vars = c('age', 'black', 'hisp', 'marr', 're74', 're75')
+       , y_var = 're78'
+       , d_vars = c('not_treated')
+       , first_stage_family = 'user-defined'
+       , predict_fun = nnet_predict_fun)
