@@ -3,21 +3,28 @@ START_TIME = Sys.time()
 library(dplyr)
 library(reshape)
 
-devtools::load_all()
+# Description:
+# This file replicates the supposed functionality of linearDML::dml.lm()
+# when the prediction function is just OLS, running regressions en masse
+# using linear algebra. Then it checks those estimates
+# against the actual linearDML::dml.lm() function.
 
+# Load the package
+devtools::load_all()
+# Find the current script
 script.name = basename(sys.frame(1)$ofile)
 
-
+# Simulation parameters
 NSIM = 200
 NOBS = 500
+
+# Generate a matrix with simulation and observation IDs
 sim.0 = expand.grid(id=1:NOBS, sim=1:NSIM)
 
+# Set a random seed
 set.seed(20220822)
 
 sim.0$one = 1
-
-# RHO = 1
-
 sim.0$c0 = 1
 
 # primitives - all gaussian
@@ -45,12 +52,11 @@ sim.0$x2 = with(sim.0, (w3 < 0) * (x2.star >= 0))
 
 sim.0$xbar = with(sim.0, x1 + x2)
 
-
+# As stated above, the covariance matrix between the x's and
+# the w's is full rank. These three lines allow us to verify
+# this by examining Delta_0.
 W = as.matrix(sim.0[, c('c0', 'w1', 'w2')])
 X = as.matrix(sim.0[, c('x1', 'x2')])
-
-# as stated above, the covariance matrix between the x's and
-# the w's is full rank.
 Delta_0 = solve(t(W) %*% W) %*% (t(W) %*% X)
 
 # structure many separate simulations
@@ -66,14 +72,14 @@ sim.1 = sim.0 %>%
             .groups='keep')
 sim.1 = as.data.frame(sim.1)
 
-# generate parameters for each simulation
+# generate parameters for each simulation. these parameters are constant
+# within each simulation but vary across simulations.
 sim.1$b0 = 0 + rnorm(nrow(sim.1))
 sim.1$b1 = 1 + rnorm(nrow(sim.1))
 sim.1$b2 = 3 + rnorm(nrow(sim.1))
 sim.1$g1 = 1 + rnorm(nrow(sim.1))
 sim.1$g2 = 3 + rnorm(nrow(sim.1))
 rownames(sim.1) = paste('tag', sim.1$sim, 'end', sep='.')
-
 sim.0$b0 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b0']
 sim.0$b1 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b1']
 sim.0$b2 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b2']
@@ -142,7 +148,6 @@ B_1 = Map(function(x, y) c(solve(t(x) %*% x) %*% (t(x) %*% y)), x=X_s, y=Y_s)
 B_all = do.call(rbind, B_1)
 sim.1[, c('b0.hat2', 'b1.hat2', 'b2.hat2', 'g1.hat2', 'g2.hat2')] = B_all
 
-
 cross.resid <- function(y, x, foldid){
   ya = y[foldid == 1, 1:ncol(y), drop=F]
   yb = y[foldid == 2, 1:ncol(y), drop=F]
@@ -158,8 +163,7 @@ cross.resid <- function(y, x, foldid){
   return(ret)
 }
 
-
-# dml
+# dml - MR
 X_s = D_s
 Z_s = Map(function(cc, ww) cbind(cc, ww), cc=C_s, ww=W_s)
 Yt_s = Map(function(w, y) (cross.resid(y, w, fold.id.0)),
@@ -170,9 +174,7 @@ B_2 = Map(function(x, y) c(solve(t(x) %*% x) %*% (t(x) %*% y)), x=Xt_s, y=Yt_s)
 B_all = do.call(rbind, B_2)
 sim.1[, c('b1.hat3', 'b2.hat3')] = B_all
 
-
-
-# pseudo het dml
+# dml - SR1
 Z_s = Map(function(cc, ww) cbind(cc, ww), cc=C_s, ww=W_s)
 Yt_s = Map(function(w, y) (cross.resid(y, w, fold.id.0)),
            w=Z_s, y=Y_s)
@@ -184,9 +186,7 @@ B_3 = Map(function(x, y) c(solve(t(x) %*% x) %*% (t(x) %*% y)), x=X_s, y=Yt_s)
 B_all = do.call(rbind, B_3)
 sim.1[, c('b1.hat4', 'b2.hat4')] = B_all
 
-
-
-# pseudo het dml - fixed
+# dml - SR2
 Dbt_s = Map(function(w, d) (d - cross.resid(d, w, fold.id.0)),
             w=Z_s, d=Db_s)
 X_s = Map(function(d, dbt, cc) cbind(dbt, d),
@@ -195,16 +195,19 @@ B_3 = Map(function(x, y) c(solve(t(x) %*% x) %*% (t(x) %*% y)), x=X_s, y=Yt_s)
 B_all = do.call(rbind, B_3)
 sim.1[, c('b100.hat5', 'b1.hat5', 'b2.hat5')] = B_all
 
-
+# how does MR differ from long regression?
 sim.1$b1.hat.d0 = abs(sim.1$b1.hat2 - sim.1$b1.hat3)
 sim.1$b2.hat.d0 = abs(sim.1$b2.hat2 - sim.1$b2.hat3)
 
+# how does MR differ from dml.lm(second_stage_family='mr')
 sim.1$b1.hat.dmr = abs(sim.1$b1.hat.mr - sim.1$b1.hat3)
 sim.1$b2.hat.dmr = abs(sim.1$b2.hat.mr - sim.1$b2.hat3)
 
+# how does SR1 differ from dml.lm(second_stage_family='sr1')
 sim.1$b1.hat.dsr1 = abs(sim.1$b1.hat.sr1 - sim.1$b1.hat4)
 sim.1$b2.hat.dsr1 = abs(sim.1$b2.hat.sr1 - sim.1$b2.hat4)
 
+# how does SR2 differ from dml.lm(second_stage_family='sr2)
 sim.1$b1.hat.dsr2 = abs(sim.1$b1.hat.sr2 - sim.1$b1.hat5)
 sim.1$b2.hat.dsr2 = abs(sim.1$b2.hat.sr2 - sim.1$b2.hat5)
 
@@ -220,8 +223,6 @@ sim.4 = sim.1 %>%
             b1.hat.dsr2=sum(b1.hat.dsr2),
             b2.hat.dsr2=sum(b2.hat.dsr2))
 
-
-
 #===========================================================
 # Estimation End
 #===========================================================
@@ -229,6 +230,3 @@ sim.4 = sim.1 %>%
 END_TIME = Sys.time()
 print(paste('Time elapsed in ', script.name, ':', sep=''))
 print(END_TIME - START_TIME)
-
-
-

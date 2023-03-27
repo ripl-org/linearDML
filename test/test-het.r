@@ -3,41 +3,39 @@ START_TIME = Sys.time()
 library(dplyr)
 library(reshape)
 library(stringr)
-
 library(DoubleML)
 library(mlr3)
 library(mlr3learners)
-devtools::load_all()
 
+# Description:
+# This file demonstrates how dml.lm() with h_vars specified leverages a single
+# treatment residualization across multiple treatment heterogeneity terms
+# to reduce the computational burden of estimation.
+
+# Load the package
+devtools::load_all()
+# Find the current script
 script.name = basename(sys.frame(1)$ofile)
 script.dir = dirname(sys.frame(1)$ofile)
 
 lgr::get_logger("mlr3")$set_threshold("warn")
 
+# Simulation parameters
 NTREES = 50
 MIN_N = 10
 NSIM = 10
 NOBS = 5000
 
+# Generate a matrix with simulation and observation IDs
 sim.0 = expand.grid(id=1:NOBS, sim=1:NSIM)
 
+# Set a random seed
 set.seed(20230216)
 
 sim.0$one = 1
 sim.0$c0 = 1
 
-# a0 = 1:99 / 100
-# plot(a0, scale(qnorm(a0)))
-# plot(a0, scale(qexp(a0)))
-# plot(a0, scale(qbeta(a0, 0.1, 0.2)))
-# plot(a0, scale(qbinom(a0, size=20, prob=0.08)))
-# plot(a0, qunif(a0) + qnorm(a0))
-#
-# n = 10000
-# a1 = rnorm(n) + (rbinom(n, size=2, prob=0.5) * 4)
-# hist(a1, breaks=50)
-# sd(a1)
-
+# functions for generating a few non-linear transformations
 distr.0 = list()
 distr.0[[1]] = function(x){ return(c(scale(qnorm(x)))) }
 distr.0[[2]] = function(x){ return(c(scale(qexp(x)))) }
@@ -55,9 +53,7 @@ sim.1 = sim.0 %>%
 sim.1 = as.data.frame(sim.1)
 rownames(sim.1) = paste('tag', sim.1$sim, 'end', sep='.')
 
-# delta.0 = rnorm(20)
-
-# primitives - all gaussian
+# primitives
 for(i in 1:20){
   sim.1[, paste('delta1', i, sep='.')] = rnorm(nrow(sim.1))
   del1 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), paste('delta1', i, sep='.')]
@@ -92,27 +88,10 @@ sim.0$eta2 = rnorm(nrow(sim.0), mean=sig, sd=sig * 0.9)
 sim.0$x2 = sim.0$x2.0 + sim.0$eta2
 
 # diagnostic
-# look.0 = sim.0 %>%
-#   group_by(sim, delta1.1, delta2.1, delta1.6, delta2.6,
-#            delta1.11, delta2.11, delta1.16, delta2.16) %>%
-#   summarize(obs=sum(one),
-#             x1.w1=cor(x1, w1),
-#             x2.w1=cor(x2, w1),
-#             x1.w6=cor(x1, w6),
-#             x2.w6=cor(x2, w6),
-#             x1.w11=cor(x1, w11),
-#             x2.w11=cor(x2, w11),
-#             x1.w16=cor(x1, w16),
-#             x2.w16=cor(x2, w16),
-#             .groups='keep')
-
-# diagnostic
 look.1 = sim.0[sim.0$sim == 5, ]
 for(i in 1:20){
   plot(look.1[, paste('w', i, sep='')], look.1[, paste('u', i, sep='')], main=i)
 }
-
-# hist(look.1$y1)
 
 
 #
@@ -172,15 +151,11 @@ keeps = c('sim', 'c0', paste('y', 1:5, sep=''), 'x1', 'x2', paste('w', 1:20, sep
           paste('x1_w', 1:20, sep=''), paste('x2_w', 1:20, sep=''))
 sim.2 = sim.0[, keeps]
 
-# fold.id.0 = c(t(matrix(c(1, 2), nrow=2, ncol=NOBS/2)))
-
-# stop('here')
-
 #===========================================================
 # Estimation Start
 #===========================================================
 
-
+# Specifying h_vars for each of the 5 models
 h.vars.1 = data.frame(d=c('x1'),
                       fx=c('c0'),
                       fxd.name=c('x1'))
@@ -205,14 +180,11 @@ w.all = paste('w', 1:20, sep='')
 #
 coeff.10 = NULL
 for(i in 1:NSIM){
-  # if((i %% 10) == 1){
-    print(paste(Sys.time(), i, sep=' : '))
-  # }
+  print(paste(Sys.time(), i, sep=' : '))
 
   sim.3 = sim.2[sim.2$sim == sim.1$sim[i], ]
 
   for(j in 1:5){
-    # print(paste(Sys.time(), i, j, sep=' : '))
     h.vars = get(paste('h.vars', j, sep='.'))
     y.curr = paste('y', j, sep='')
     d.vars = h.vars$fxd.name
@@ -271,16 +243,7 @@ for(i in 1:NSIM){
       sim.1[i, paste('time.rf2', j, sep='.')] = TIME_01 - TIME_00
 
 
-
-      #
       # DML from DoubleML
-      # 2023-02-16 AYSM: oh actually maybe this doesn't allow us to see
-      # heterogeneous treatment effects at all, it just relaxes the assumption
-      # so that there *could plausibly be* heterogeneous treatment effects
-      #
-      # 2023-02-21 AYSM: we can always just implement it in the partially linear
-      # model including the heterogeneous treatments as treatments, but will be
-      # different
 
       TIME_00 = Sys.time()
       learner = lrn("regr.ranger", num.trees = NTREES, min.node.size=MIN_N, mtry=10, max.depth=5)
@@ -290,7 +253,6 @@ for(i in 1:NSIM){
                                                        y_col=y.curr, d_cols=d.vars))
       dml_plr_obj = suppressMessages(DoubleMLPLR$new(obj_dml_data, ml_l, ml_m, n_folds=2))
       suppressMessages(dml_plr_obj$fit())
-
 
       invisible(capture.output(coeff.0 <- as.data.frame(as.matrix(dml_plr_obj$summary()))))
       colnames(coeff.0) = c('b', 'se', 't', 'p')
@@ -307,7 +269,7 @@ for(i in 1:NSIM){
   }
 }
 
-
+# Examine main effects and heterogeneity terms
 params.0 = names(sim.1)[grepl('((alpha)|(beta))', names(sim.1))]
 params.1 = as.data.frame(melt(sim.1, id.vars=c('sim'),
                               measure.vars=params.0))
@@ -323,10 +285,11 @@ keeps = c('sim', 'x', 'param')
 params.2 = params.1[, keeps]
 coeff.11 = merge(coeff.10, params.2, by=c('sim', 'x'), all.x=T, all.y=F)
 coeff.12 = coeff.11[with(coeff.11, order(sim, y, method)), ]
-# look.0 = params.1[params.1$sim == 1, ]
 
 coeff.12$one = 1
 
+# get mean absolute distance and root mean squared error across all simulations
+# for each model.
 coeff.13 = coeff.12 %>%
   filter(sim <= 5) %>%
   group_by(y, x, mm=method) %>%
@@ -336,14 +299,11 @@ coeff.13 = coeff.12 %>%
             .groups='keep')
 coeff.13 = as.data.frame(coeff.13)
 coeff.14 = as.data.frame(cast(coeff.13, y + x + obs ~ mm, value='rmse'))
-
 coeff.14$w = as.numeric(ifelse(grepl('w', coeff.14$x), gsub('x[0-9]_w', '', coeff.14$x), '0'))
 coeff.14$x0 = gsub('_w[0-9]{1,2}$', '', coeff.14$x)
 coeff.15 = coeff.14[with(coeff.14, order(y, x0, w, obs)), ]
 
-# look.0 = as.data.frame(cast(coeff.12, 'y + x + sim ~ method', value='b'))
-
-
+# Examine time elapsed in each method
 time.0 = names(sim.1)[grepl('(time)', names(sim.1))]
 time.1 = as.data.frame(melt(sim.1, id.vars=c('sim'),
                               measure.vars=time.0))
@@ -359,8 +319,6 @@ time.2 = time.1 %>%
 time.2 = as.data.frame(time.2)
 
 time.3 = as.data.frame(cast(time.2, y + obs ~ mm, value='time.sum'))
-
-
 
 print(script.dir)
 setwd(script.dir)

@@ -4,22 +4,27 @@ library(dplyr)
 library(reshape)
 library(stringr)
 
-devtools::load_all()
+# Description:
+# This file tests the bias of the dml.lm() for each second_stage_family
+# option against the theoretically predicted bias.
 
+# Load the package
+devtools::load_all()
+# Find the current script
 script.name = basename(sys.frame(1)$ofile)
 script.dir = dirname(sys.frame(1)$ofile)
 
-
+# Simulation parameters
 NSIM = 50
 NOBS = 10000
+
+# Generate a matrix with simulation and observation IDs
 sim.0 = expand.grid(id=1:NOBS, sim=1:NSIM)
 
+# Set a random seed
 set.seed(20220822)
 
 sim.0$one = 1
-
-# RHO = 1
-
 sim.0$c0 = 1
 
 # primitives - all gaussian
@@ -47,12 +52,11 @@ sim.0$x2 = with(sim.0, (w3 < 0) * (x2.star >= 0))
 
 sim.0$xbar = with(sim.0, x1 + x2)
 
-
+# As stated above, the covariance matrix between the x's and
+# the w's is full rank. These three lines allow us to verify
+# this by examining Delta_0.
 W = as.matrix(sim.0[, c('c0', 'w1', 'w2')])
 X = as.matrix(sim.0[, c('x1', 'x2')])
-
-# as stated above, the covariance matrix between the x's and
-# the w's is full rank.
 Delta_0 = solve(t(W) %*% W) %*% (t(W) %*% X)
 
 # structure many separate simulations
@@ -74,14 +78,14 @@ b2 = 3 + rnorm(1)
 g1 = 1 + rnorm(1)
 g2 = 3 + rnorm(1)
 
-# generate parameters for each simulation
+# generate parameters for each simulation. these parameters are constant
+# within each simulation and across simulations.
 sim.1$b0 = b0
 sim.1$b1 = b1
 sim.1$b2 = b2
 sim.1$g1 = g1
 sim.1$g2 = g2
 rownames(sim.1) = paste('tag', sim.1$sim, 'end', sep='.')
-
 sim.0$b0 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b0']
 sim.0$b1 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b1']
 sim.0$b2 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b2']
@@ -123,11 +127,9 @@ for(i in 1:NSIM){
       sim.1[i, c(tmp1, tmp2)] = coeff.0[c('x1', 'x2'), 'Estimate']
     }
   }
-  # stop('here 126')
 }
 
-# measure.vars.0 = c('b1.hat.mr', 'b2.hat.mr', 'b1.hat.sr1', 'b2.hat.sr1',
-#                    'b1.hat.sr2', 'b2.hat.sr2')
+
 measure.vars.0 = names(sim.1)[grepl('b[12].hat', names(sim.1))]
 sim.11 = as.data.frame(melt(sim.1, id.vars=c('sim'),
                             measure.vars=measure.vars.0))
@@ -138,21 +140,7 @@ sim.11[, c('s2', 's1')] = str_split_fixed(sim.11$method, '\\.', n=2)
 sim.11$true.value = with(sim.11, ifelse(var.name == 'b1', b1, b2))
 sim.11$diff = with(sim.11, estimate - true.value)
 
-# sim.1$b1.hat.dmr = (sim.1$b1.hat.mr - sim.1$b1)
-# sim.1$b2.hat.dmr = (sim.1$b2.hat.mr - sim.1$b2)
-#
-# sim.1$b1.hat.dsr1 = (sim.1$b1.hat.sr1 - sim.1$b1)
-# sim.1$b2.hat.dsr1 = (sim.1$b2.hat.sr1 - sim.1$b2)
-#
-# sim.1$b1.hat.dsr2 = (sim.1$b1.hat.sr2 - sim.1$b1)
-# sim.1$b2.hat.dsr2 = (sim.1$b2.hat.sr2 - sim.1$b2)
-
-# measure.vars.0 = c('b1.hat.dmr', 'b2.hat.dmr', 'b1.hat.dsr1', 'b2.hat.dsr1',
-#                    'b1.hat.dsr2', 'b2.hat.dsr2')
-# sim.4 = as.data.frame(melt(sim.1, id.vars='sim',
-#                            measure.vars=measure.vars.0))
-
-
+# Get bias among simulations as average difference with true value
 sim.11$one = 1
 sim.5 = sim.11 %>%
   group_by(variable, var.name, method, s1, s2) %>%
@@ -165,33 +153,15 @@ sim.6 = as.data.frame(melt(sim.5, id.vars=c('var.name', 'method', 's1', 's2'),
                            measure.vars=c('dmn', 'dsd')))
 sim.7 = as.data.frame(cast(sim.6, s2 + var.name ~ s1 + variable, value='dmn'))
 
-
-
 #===========================================================
 # Estimation End
 #===========================================================
 
-PSI_0 = as.matrix(sim.0[, c('c0', 'w1', 'w2')]) %*% Delta_0
-# sim.0[, c('psi1', 'psi2')] = PSI_0
-# sim.0$f1.0 = with(sim.0, 1 - (psi1 + psi2))
-# sim.0$f2.1 = with(sim.0, psi1)
-# sim.0$f2.2 = with(sim.0, psi2)
-# sim.0$f3.1 = with(sim.0, (psi1 + psi2) * b1)
-# sim.0$f3.2 = with(sim.0, (psi1 + psi2) * b2)
-# sim.0$f4.1 = with(sim.0, psi1 * ((psi1 * b1) + (psi2 * b2)))
-# sim.0$f4.2 = with(sim.0, psi2 * ((psi1 * b1) + (psi2 * b2)))
-# sim.0$numer.1 = with(sim.0, f1.0 * f2.1 * (f3.1 - f4.1))
-# sim.0$numer.2 = with(sim.0, f1.0 * f2.2 * (f3.2 - f4.2))
-# sim.0$denom.1 = with(sim.0, f1.0 * f1.0 * f2.1)
-# sim.0$denom.2 = with(sim.0, f1.0 * f1.0 * f2.2)
 #
-# look.0 = sim.0 %>%
-#   summarize(numer.1=mean(numer.1),
-#             numer.2=mean(numer.2),
-#             denom.1=mean(denom.1),
-#             denom.2=mean(denom.2))
-# DB1 = look.0[1, 'numer.1'] / look.0[1, 'denom.1']
-# DB2 = look.0[1, 'numer.2'] / look.0[1, 'denom.2']
+# Now, calculate the theoretical bias of SR1 and SR2
+#
+
+PSI_0 = as.matrix(sim.0[, c('c0', 'w1', 'w2')]) %*% Delta_0
 
 # SR2
 Z_0 = PSI_0 %*% rbind(1, 1)
@@ -220,14 +190,9 @@ f9 = t(D_TIL) %*% f8 / (NSIM * NOBS)
 f10 = t(D_TIL) %*% D_TIL / (NSIM * NOBS)
 f11 = solve(f10) %*% f9
 
-# f12 = as.matrix(sim.0[, c('c0', 'w1', 'w2')])
-# Y_0 = as.matrix(sim.0[, 'y', drop=F])
-# Y_TIL = Y_0 - (f12 %*% solve(t(f12) %*% f12) %*% (t(f12) %*% Y_0))
-# f13 = solve(t(D_TIL) %*% D_TIL) %*% (t(D_TIL) %*% Y_TIL)
-# f14 = f13 - rbind(b1, b2)
-
 sim.7[3:4, 'approx.bias'] = f11[1:2, 1]
-month.name(5)
+
+
 print(script.dir)
 setwd(script.dir)
 

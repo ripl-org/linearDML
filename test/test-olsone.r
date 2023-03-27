@@ -2,41 +2,37 @@ START_TIME = Sys.time()
 
 library(dplyr)
 library(reshape)
-
 library(DoubleML)
 library(mlr3)
 library(mlr3learners)
-# library(data.table)
+
+# Description:
+# This file replicates the supposed functionality of linearDML::dml.lm()
+# when the prediction function is OLS or RF, running regressions one by one
+# using lm() and DoubleML. Then it checks those estimates
+# against the actual linearDML::dml.lm() function.
+
+# Load the package
 devtools::load_all()
-
-
+# Find the current script
 script.name = basename(sys.frame(1)$ofile)
 script.dir = dirname(sys.frame(1)$ofile)
 
-
 lgr::get_logger("mlr3")$set_threshold("warn")
 
+# Simulation parameters
 NTREES = 100
-# M_TRY = 1
 MIN_N = 2
-# learner = lrn("regr.ranger", num.trees = 100, mtry = 20, min.node.size = 2, max.depth = 5)
-# learner = lrn("regr.ranger", num.trees = NTREES, min.node.size = MIN_N)
-# ml_l = learner$clone()
-# ml_m = learner$clone()
-# set.seed(1111)
-# data = make_plr_CCDDHNR2018(alpha=0.5, n_obs=500, dim_x=20, return_type='data.table')
-
-
 NSIM = 50
 NOBS = 500
+
+# Generate a matrix with simulation and observation IDs
 sim.0 = expand.grid(id=1:NOBS, sim=1:NSIM)
 
+# Set a random seed
 set.seed(20220822)
 
 sim.0$one = 1
-
-# RHO = 1
-
 sim.0$c0 = 1
 
 # primitives - all gaussian
@@ -64,12 +60,11 @@ sim.0$x2 = with(sim.0, (w3 < 0) * (x2.star >= 0))
 
 sim.0$xbar = with(sim.0, x1 + x2)
 
-
+# As stated above, the covariance matrix between the x's and
+# the w's is full rank. These three lines allow us to verify
+# this by examining Delta_0.
 W = as.matrix(sim.0[, c('c0', 'w1', 'w2')])
 X = as.matrix(sim.0[, c('x1', 'x2')])
-
-# as stated above, the covariance matrix between the x's and
-# the w's is full rank.
 Delta_0 = solve(t(W) %*% W) %*% (t(W) %*% X)
 
 # structure many separate simulations
@@ -85,14 +80,14 @@ sim.1 = sim.0 %>%
             .groups='keep')
 sim.1 = as.data.frame(sim.1)
 
-# generate parameters for each simulation
+# generate parameters for each simulation. these parameters are constant
+# within each simulation but vary across simulations.
 sim.1$b0 = 0 + rnorm(nrow(sim.1))
 sim.1$b1 = 1 + rnorm(nrow(sim.1))
 sim.1$b2 = 3 + rnorm(nrow(sim.1))
 sim.1$g1 = 1 + rnorm(nrow(sim.1))
 sim.1$g2 = 3 + rnorm(nrow(sim.1))
 rownames(sim.1) = paste('tag', sim.1$sim, 'end', sep='.')
-
 sim.0$b0 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b0']
 sim.0$b1 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b1']
 sim.0$b2 = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'b2']
@@ -171,15 +166,14 @@ for(i in 1:NSIM){
     sim.1[i, c(tmp1, tmp2)] = coeff.0[c('x1', 'x2'), 'Estimate']
   }
 
-  # options(warn=-1)
+  # MR - RF prediction
   model.0 = suppressMessages(dml.lm(sim.3, 'y', c('w1', 'w2'), d_vars = c('x1', 'x2'),
                    first_stage_family = 'rf', second_stage_family = 'mr',
                    trees=NTREES, min_n = MIN_N, mtry= 2))
-  # options(warn=0)
   coeff.0 = as.data.frame(summary(model.0$model)$coefficients)
   sim.1[i, c('b1.hat.rf', 'b2.hat.rf')] = coeff.0[c('x1', 'x2'), 'Estimate']
 
-  # learner = lrn("regr.ranger", num.trees = 100, mtry = 20, min.node.size = 2, max.depth = 5)
+  # DoubleML
   learner = lrn("regr.ranger", num.trees = NTREES, mtry=2, min.node.size=MIN_N)
   ml_l = learner$clone()
   ml_m = learner$clone()
@@ -187,35 +181,34 @@ for(i in 1:NSIM){
   dml_plr_obj = suppressMessages(DoubleMLPLR$new(obj_dml_data, ml_l, ml_m, n_folds=2))
   suppressMessages(dml_plr_obj$fit())
 
-  # dml_plr_obj$n_folds
-
-  # c(dml_plr_obj$all_coef)
   sim.1[i, c('b1.hat.dub', 'b2.hat.dub')] = c(dml_plr_obj$coef)
-  # stop('here 179')
-  # dml_plr_obj
-  # print(dml_plr_obj)
-  # stop('here 126')
 }
 
-
+# how does MR differ from long regression?
 sim.1$b1.hat.d0 = abs(sim.1$b1.hat2 - sim.1$b1.hat3)
 sim.1$b2.hat.d0 = abs(sim.1$b2.hat2 - sim.1$b2.hat3)
 
+# how does MR differ from dml.lm(second_stage_family='mr')
 sim.1$b1.hat.dmr = abs(sim.1$b1.hat.mr - sim.1$b1.hat3)
 sim.1$b2.hat.dmr = abs(sim.1$b2.hat.mr - sim.1$b2.hat3)
 
+# how does SR1 differ from dml.lm(second_stage_family='sr1')
 sim.1$b1.hat.dsr1 = abs(sim.1$b1.hat.sr1 - sim.1$b1.hat4)
 sim.1$b2.hat.dsr1 = abs(sim.1$b2.hat.sr1 - sim.1$b2.hat4)
 
+# how does SR2 differ from dml.lm(second_stage_family='sr2')
 sim.1$b1.hat.dsr2 = abs(sim.1$b1.hat.sr2 - sim.1$b1.hat5)
 sim.1$b2.hat.dsr2 = abs(sim.1$b2.hat.sr2 - sim.1$b2.hat5)
 
+# how does dml.lm(first_stage_family='rf') differ from true parameter?
 sim.1$b1.hat.drf = abs(sim.1$b1.hat.rf - sim.1$b1)
 sim.1$b2.hat.drf = abs(sim.1$b2.hat.rf - sim.1$b2)
 
+# how does DoubleML with rf differ from true parameter?
 sim.1$b1.hat.ddub = abs(sim.1$b1 - sim.1$b1.hat.dub)
 sim.1$b2.hat.ddub = abs(sim.1$b2 - sim.1$b2.hat.dub)
 
+# how does dml.lm(first_stage_family='rf') differ from DoubleML?
 sim.1$b1.hat.dcmp = abs(sim.1$b1.hat.rf - sim.1$b1.hat.dub)
 sim.1$b2.hat.dcmp = abs(sim.1$b2.hat.rf - sim.1$b2.hat.dub)
 

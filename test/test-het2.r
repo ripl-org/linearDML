@@ -3,36 +3,38 @@ START_TIME = Sys.time()
 library(dplyr)
 library(reshape)
 library(stringr)
-
 library(DoubleML)
 library(mlr3)
 library(mlr3learners)
-devtools::load_all()
 
+# Description:
+# This file demonstrates how dml.lm() with h_vars specified leverages a single
+# treatment residualization across multiple treatment heterogeneity terms
+# to reduce the computational burden of estimation.
+
+# Load the package
+devtools::load_all()
+# Find the current script
 script.name = basename(sys.frame(1)$ofile)
 script.dir = dirname(sys.frame(1)$ofile)
 
 lgr::get_logger("mlr3")$set_threshold("warn")
 
+# Simulation parameters
 NTREES = 50
 MIN_N = 10
 NSIM = 100
 NOBS = 5000
 MTRY = 4
 
+# Generate a matrix with simulation and observation IDs
 sim.0 = expand.grid(id=1:NOBS, sim=1:NSIM)
 
+# Set a random seed
 set.seed(20230216)
 
 sim.0$one = 1
 sim.0$c0 = 1
-#
-#
-# distr.0 = list()
-# distr.0[[1]] = function(x){ return(c(scale(qnorm(x)))) }
-# distr.0[[2]] = function(x){ return(c(scale(qexp(x)))) }
-# distr.0[[3]] = function(x){ return(c(scale(qbeta(x, 0.1, 0.2)))) }
-# distr.0[[4]] = function(x){ return(c(scale(qbinom(x, size=20, prob=0.08)))) }
 
 # structure many separate simulations
 sim.0$big.id = 1:nrow(sim.0)
@@ -45,17 +47,12 @@ sim.1 = sim.0 %>%
 sim.1 = as.data.frame(sim.1)
 rownames(sim.1) = paste('tag', sim.1$sim, 'end', sep='.')
 
-# delta.0 = rnorm(20)
-
+# generate parameters for each simulation. these parameters are constant
+# within each simulation but vary across simulations.
 sim.1$delta = runif(nrow(sim.1)) + 1
 sim.0$delta = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'delta']
-
 sim.1$gamma = runif(nrow(sim.1)) + 1
 sim.0$gamma = sim.1[paste('tag', sim.0$sim, 'end', sep='.'), 'gamma']
-
-# sim.0$v1 = runif(nrow(sim.0))
-# sim.0$v2 = runif(nrow(sim.0))
-# sim.0$v3 = runif(nrow(sim.0))
 
 sim.0$wallmid = 0
 for(i in 1:5){
@@ -65,19 +62,14 @@ for(i in 1:5){
   sim.0$wallmid = sim.0$wallmid + sim.0[, paste('w', i, 'mid', sep='')]
 }
 
+# Generate covariate transformations that are not correlated with any of the
+# covariates themselves
 sim.0$vcorners = with(sim.0, as.numeric((w1mid + w2mid) == 0))
 sim.0$vedges = with(sim.0, as.numeric((w1mid + w2mid) == 1))
 sim.0$vskel = with(sim.0, as.numeric((w1mid + w2mid) <= 1))
-
-mean(sim.0$vcorners)
-# stop('here')
-
-# mean(sim.0$vskel) * 27
 look.0 = cor(sim.0[, c('w1', 'w2', 'w3', 'w4', 'w5', 'vcorners', 'vedges', 'vskel')])
 
-# stop('here 71')
-
-
+# Latent treatments
 sim.0$x1.0 = sim.0$vcorners * sim.0$delta
 sim.0$x2.0 = sim.0$vcorners * sim.0$delta
 
@@ -90,44 +82,11 @@ sim.0$x1 = as.numeric((sim.0$x1.0 + sim.0$eta1) < 0)
 sim.0$eta2 = rnorm(nrow(sim.0), mean=0, sd=1)
 sim.0$x2 = sim.0$x2.0 + sim.0$eta2
 
-look.1 = as.data.frame(summary(lm(x1 ~ vcorners, data=sim.0))$coefficients)
-look.2 = as.data.frame(summary(lm(x2 ~ vcorners, data=sim.0))$coefficients)
-
-stop('here 96')
-
-# diagnostic
-# look.0 = sim.0 %>%
-#   group_by(sim, delta1.1, delta2.1, delta1.6, delta2.6,
-#            delta1.11, delta2.11, delta1.16, delta2.16) %>%
-#   summarize(obs=sum(one),
-#             x1.w1=cor(x1, w1),
-#             x2.w1=cor(x2, w1),
-#             x1.w6=cor(x1, w6),
-#             x2.w6=cor(x2, w6),
-#             x1.w11=cor(x1, w11),
-#             x2.w11=cor(x2, w11),
-#             x1.w16=cor(x1, w16),
-#             x2.w16=cor(x2, w16),
-#             .groups='keep')
-
-# diagnostic
-# look.1 = sim.0[sim.0$sim == 5, ]
-# for(i in 1:20){
-#   plot(look.1[, paste('w', i, sep='')], look.1[, paste('u', i, sep='')], main=i)
-# }
-
-# hist(look.1$y1)
-
-
 #
 # construct outcomes
 #
 
-# # sum up covariate effects
-# sim.0$u.all = apply(sim.0[, paste('u', 1:20, sep='')], MARGIN=1, FUN=sum)
-# exogenous errors
 sim.0$e1 = rnorm(nrow(sim.0)) + (rbinom(nrow(sim.0), size=2, prob=0.5) * 4)
-# constant
 gamma.0 = 3
 
 # treatment effects - main
@@ -157,8 +116,6 @@ for(i in 1:5){
   }
 }
 
-
-
 # 1. no heterogeneity, only x1
 sim.0$y1 = with(sim.0, gamma.0 + (alpha1 * x1) + (gamma * vcorners) + e1)
 
@@ -173,24 +130,13 @@ sim.0$y3 = with(sim.0, gamma.0 + (alpha2 * x2) + (gamma * vcorners) + e1)
 sim.0$y4 = with(sim.0, gamma.0 + (alpha2 * x2) + (gamma * vcorners) +
                   het.all.2 + e1)
 
-# # 5. yes heterogeneity, all treatments and covariates
-# sim.0$y5 = with(sim.0, gamma.0 + u.all + (alpha1 * x1) + (alpha2 * x2) +
-#                   het.all + e1)
-
 keeps = c('sim', 'c0', paste('y', 1:4, sep=''), 'x1', 'x2', paste('w', 1:5, sep=''),
           paste('x1_w', 1:5, sep=''), paste('x2_w', 1:5, sep=''))
 sim.2 = sim.0[, keeps]
 
-# fold.id.0 = c(t(matrix(c(1, 2), nrow=2, ncol=NOBS/2)))
-
-# stop('here')
-
 #===========================================================
 # Estimation Start
 #===========================================================
-
-# options(warn=0)
-# options(warn=2)
 
 h.vars.1 = data.frame(d=c('x1'),
                       fx=c('c0'),
@@ -204,15 +150,7 @@ h.vars.3 = data.frame(d=c('x2'),
 h.vars.4 = data.frame(d=c(rep('x2', 6)),
                       fx=c('c0', paste('w', 1:5, sep='')),
                       fxd.name=c('x2', paste('x2_w', 1:5, sep='')))
-# h.vars.5 = data.frame(d=c(rep('x1', 21), rep('x2', 21)),
-#                       fx=c('c0', paste('w', 1:20, sep=''), 'c0', paste('w', 1:20, sep='')),
-#                       fxd.name=c('x1', paste('x1_w', 1:20, sep=''), 'x2', paste('x2_w', 1:20, sep='')))
 w.all = paste('w', 1:5, sep='')
-
-# sim.2$x1_w10 = with(sim.2, x1 * w10)
-# sim.2$x1_w20 = with(sim.2, x1 * w20)
-# sim.2$x2_w10 = with(sim.2, x2 * w10)
-# sim.2$x2_w20 = with(sim.2, x2 * w20)
 
 
 #
@@ -221,26 +159,16 @@ w.all = paste('w', 1:5, sep='')
 #
 coeff.10 = NULL
 for(i in 1:NSIM){
-  # if((i %% 10) == 1){
+  if((i %% 10) == 1){
     print(paste(Sys.time(), i, sep=' : '))
-  # }
+  }
 
   sim.3 = sim.2[sim.2$sim == sim.1$sim[i], ]
 
   for(j in 1:4){
-    # print(paste(Sys.time(), i, j, sep=' : '))
     h.vars = get(paste('h.vars', j, sep='.'))
     y.curr = paste('y', j, sep='')
-    # x.curr = paste('x', ceiling(j / 2), sep='')
-    # x.curr.10 = paste(x.curr, 'w10', sep='_')
-    # x.curr.20 = paste(x.curr, 'w20', sep='_')
     d.vars = h.vars$fxd.name
-    # if((j %% 2) == 0){
-    #   jj = 1:3
-    # }else{
-    #   jj = 1
-    # }
-    # ajj = c(x.curr, x.curr.10, x.curr.20)[jj]
 
     #
     # DML with OLS prediction
@@ -250,10 +178,6 @@ for(i in 1:NSIM){
                                       first_stage_family = 'ols', second_stage_family = 'mr'))
     coeff.0 = as.data.frame(summary(model.0$model)$coefficients)
     colnames(coeff.0) = c('b', 'se', 't', 'p')
-    # aj = paste(c('a.hat.ols', 'b10.hat.ols', 'b20.hat.ols'), j, sep='.')[jj]
-    # sim.1[i, aj] = coeff.0[ajj, 'b']
-    # aj = paste(c('a.se.ols', 'b10.se.ols', 'b20.se.ols'), j, sep='.')[jj]
-    # sim.1[i, aj] = coeff.0[ajj, 'se']
     coeff.0$x = rownames(coeff.0)
     coeff.0$method = 'ols'
     coeff.0$y = j
@@ -272,10 +196,6 @@ for(i in 1:NSIM){
                                       use_default_hyper = F))
     coeff.0 = as.data.frame(summary(model.0$model)$coefficients)
     colnames(coeff.0) = c('b', 'se', 't', 'p')
-    # aj = paste(c('a.hat.rf', 'b10.hat.rf', 'b20.hat.rf'), j, sep='.')[jj]
-    # sim.1[i, aj] = coeff.0[ajj, 'b']
-    # aj = paste(c('a.se.rf', 'b10.se.rf', 'b20.se.rf'), j, sep='.')[jj]
-    # sim.1[i, aj] = coeff.0[ajj, 'se']
     coeff.0$x = rownames(coeff.0)
     coeff.0$method = 'rf'
     coeff.0$y = j
@@ -295,10 +215,6 @@ for(i in 1:NSIM){
                                         use_default_hyper = F))
       coeff.0 = as.data.frame(summary(model.0$model)$coefficients)
       colnames(coeff.0) = c('b', 'se', 't', 'p')
-      # aj = paste(c('a.hat.rf2', 'b10.hat.rf2', 'b20.hat.rf2'), j, sep='.')[jj]
-      # sim.1[i, aj] = coeff.0[ajj, 'b']
-      # aj = paste(c('a.se.rf2', 'b10.se.rf2', 'b20.se.rf2'), j, sep='.')[jj]
-      # sim.1[i, aj] = coeff.0[ajj, 'se']
       coeff.0$x = rownames(coeff.0)
       coeff.0$method = 'rf2'
       coeff.0$y = j
@@ -311,14 +227,7 @@ for(i in 1:NSIM){
 
       #
       # DML from DoubleML
-      # 2023-02-16 AYSM: oh actually maybe this doesn't allow us to see
-      # heterogeneous treatment effects at all, it just relaxes the assumption
-      # so that there *could plausibly be* heterogeneous treatment effects
       #
-      # 2023-02-21 AYSM: we can always just implement it in the partially linear
-      # model including the heterogeneous treatments as treatments, but will be
-      # different
-
       TIME_00 = Sys.time()
       learner = lrn("regr.ranger", num.trees = NTREES, min.node.size=MIN_N, mtry=MTRY, max.depth=5)
       ml_l = learner$clone()
@@ -328,31 +237,9 @@ for(i in 1:NSIM){
       dml_plr_obj = suppressMessages(DoubleMLPLR$new(obj_dml_data, ml_l, ml_m, n_folds=2))
       suppressMessages(dml_plr_obj$fit())
 
-      # ml_m_2 = lrn("classif.ranger", num.trees = NTREES, mtry=10, min.node.size=MIN_N)
-      # dml_irm_obj = DoubleMLIRM$new(obj_dml_data, ml_l, ml_m_2, n_folds=2)
-      # dml_irm_obj$fit(store_predictions = T)
-
-      # dml_irm_obj$coef
-      # dml_irm_obj$print()
-      #
-      # dml_irm_obj$summary()
-      # dml_irm_obj$fit()
-      #
-      # sim.3$g0 = dml_irm_obj$predictions$ml_g0
-      # sim.3$g1 = dml_irm_obj$predictions$ml_g1
-      # sim.3$te = with(sim.3, g1 - g0)
-      # plot(sim.3$w10, sim.3$te)
-      #
-      # mean(sim.3[sim.3$x1 >= 0, 'te'])
-
-      # suppressMessages
-
       invisible(capture.output(coeff.0 <- as.data.frame(as.matrix(dml_plr_obj$summary()))))
       colnames(coeff.0) = c('b', 'se', 't', 'p')
-      # aj = paste(c('a.hat.dub', 'b10.hat.dub', 'b20.hat.dub'), j, sep='.')[jj]
-      # sim.1[i, aj] = coeff.0[ajj, 'b']
-      # aj = paste(c('a.se.dub', 'b10.se.dub', 'b20.se.dub'), j, sep='.')[jj]
-      # sim.1[i, aj] = coeff.0[ajj, 'se']
+
       coeff.0$x = rownames(coeff.0)
       coeff.0$method = 'dub'
       coeff.0$y = j
@@ -361,12 +248,10 @@ for(i in 1:NSIM){
       TIME_01 = Sys.time()
       sim.1[i, paste('time.dub', j, sep='.')] = TIME_01 - TIME_00
     }
-
-
   }
 }
 
-
+# Examine main effects and heterogeneity terms
 params.0 = names(sim.1)[grepl('((alpha)|(beta))', names(sim.1))]
 params.1 = as.data.frame(melt(sim.1, id.vars=c('sim'),
                               measure.vars=params.0))
@@ -382,10 +267,10 @@ keeps = c('sim', 'x', 'param')
 params.2 = params.1[, keeps]
 coeff.11 = merge(coeff.10, params.2, by=c('sim', 'x'), all.x=T, all.y=F)
 coeff.12 = coeff.11[with(coeff.11, order(sim, y, method)), ]
-# look.0 = params.1[params.1$sim == 1, ]
-
 coeff.12$one = 1
 
+# get mean absolute distance and root mean squared error across all simulations
+# for each model.
 coeff.13 = coeff.12 %>%
   filter(sim <= 5) %>%
   group_by(y, x, mm=method) %>%
@@ -395,12 +280,11 @@ coeff.13 = coeff.12 %>%
             rmse=sqrt(mean((b - param)^2)),
             .groups='keep')
 coeff.13 = as.data.frame(coeff.13)
-
 coeff.14 = as.data.frame(melt(coeff.13, id.vars=c('y', 'x', 'mm'),
                               measure.vars=c('mad', 'bias', 'rmse')))
 coeff.15 = as.data.frame(cast(coeff.14, y + x ~ variable + mm, value='value'))
 
-
+# Examine time elapsed in each method
 time.0 = names(sim.1)[grepl('(time)', names(sim.1))]
 time.1 = as.data.frame(melt(sim.1, id.vars=c('sim'),
                               measure.vars=time.0))
