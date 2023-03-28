@@ -2,7 +2,7 @@
 
 ## Overview
 
-`linearDML` implements double/debiased machine learning (DML) [Chernozhukov et al. (2018)](https://doi.org/10.1111/ectj.12097) and adds a method for flexibly specifying interactions with treatment variables.
+`linearDML` implements double/debiased machine learning (DML) [Chernozhukov et al. (2018)](https://doi.org/10.1111/ectj.12097) for partially linear models and adds a method for flexibly specifying interactions with treatment variables.
 
 
 ## Usage
