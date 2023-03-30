@@ -26,7 +26,7 @@ When using `dml.lm` to specify variable interactions, the `h_vars` argument expe
 * `fx` - the name of the covariate to interact
 * `fxd.name` - the name of a calculated columns that defines the variable interaction
 
-```
+```r
 # Using h_vars, with covariate interaction terms
 #
 iris$sep.wid.2 = with(iris, Sepal.Width ^ 2)
